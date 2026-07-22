@@ -1,84 +1,101 @@
 /**
- * Moweb Motion DNA
- * Cinematic — slow, precise, purposeful.
- * Every element combines multiple transforms.
+ * motion/variants.js
+ * Moweb Studio — shared motion tokens
+ *
+ * Note: Hero.jsx now manages all its own scroll-driven transforms inline
+ * for maximum precision. These variants are kept for other components
+ * (cards, nav, footers, etc.) that still benefit from declarative Framer Motion.
  */
 
+/* ─── Easing curves ────────────────────────────────────────────── */
 export const ease = {
-  cinematic: [0.16, 1, 0.3, 1],
-  reveal:    [0.22, 1, 0.36, 1],
-  drift:     [0.4, 0, 0.2, 1],
+  cinematic : [0.16, 1, 0.3, 1],
+  drift     : [0.25, 0.46, 0.45, 0.94],
+  snap      : [0.4, 0, 0.2, 1],
+  smooth    : [0.43, 0.13, 0.23, 0.96],
 }
 
 export const duration = {
-  instant: 0.2,
-  fast:    0.5,
-  medium:  0.9,
-  slow:    1.4,
-  cinematic: 2.0,
+  fast   : 0.25,
+  base   : 0.55,
+  slow   : 1.00,
+  cinema : 1.40,
 }
 
-/** Stagger children with cinema pacing */
-export const staggerContainer = (stagger = 0.12, delay = 0) => ({
-  hidden: {},
-  show: {
-    transition: {
-      staggerChildren: stagger,
-      delayChildren: delay,
-    },
+/* ─── Reusable variants ────────────────────────────────────────── */
+
+/**
+ * Stagger container — wraps children that use motion variants
+ * @param {number} stagger  delay between children (seconds)
+ * @param {number} delay    initial delay before first child
+ */
+export const staggerContainer = (stagger = 0.1, delay = 0) => ({
+  hidden : {},
+  show   : {
+    transition: { staggerChildren: stagger, delayChildren: delay },
   },
 })
 
-/** Headline reveal — clip-path + translate + blur */
-export const headlineReveal = {
-  hidden: {
-    y: 60,
-    opacity: 0,
-    filter: 'blur(12px)',
-    clipPath: 'inset(0 0 100% 0)',
-  },
-  show: {
-    y: 0,
-    opacity: 1,
-    filter: 'blur(0px)',
-    clipPath: 'inset(0 0 0% 0)',
-    transition: {
-      duration: duration.slow,
-      ease: ease.cinematic,
-    },
-  },
-}
-
-/** Drift in from below with scale */
+/**
+ * Single line / element drift upward
+ * @param {number} delay
+ */
 export const driftUp = (delay = 0) => ({
-  hidden: { y: 40, opacity: 0, scale: 0.96 },
-  show: {
-    y: 0,
+  hidden : { opacity: 0, y: 24 },
+  show   : {
     opacity: 1,
-    scale: 1,
-    transition: { duration: duration.medium, ease: ease.reveal, delay },
+    y      : 0,
+    transition: { duration: duration.slow, ease: ease.cinematic, delay },
   },
 })
 
-/** Horizontal drift */
-export const driftLeft = (delay = 0) => ({
-  hidden: { x: 40, opacity: 0 },
-  show: {
-    x: 0,
+/**
+ * Headline reveal — slides up from a clipped container
+ */
+export const headlineReveal = {
+  hidden : { opacity: 0, y: '105%' },
+  show   : {
     opacity: 1,
-    transition: { duration: duration.medium, ease: ease.reveal, delay },
+    y      : '0%',
+    transition: { duration: duration.cinema, ease: ease.cinematic },
+  },
+}
+
+/**
+ * Ambient float loop — subtle continuous vertical oscillation
+ * Use as spread props: <motion.div {...floatLoop(14, 9)} />
+ *
+ * @param {number} duration  seconds for one full loop
+ * @param {number} distance  pixels of travel
+ */
+export const floatLoop = (dur = 12, distance = 8) => ({
+  animate  : { y: [0, -distance, 0] },
+  transition: {
+    duration : dur,
+    repeat   : Infinity,
+    ease     : 'easeInOut',
   },
 })
 
-/** Ambient float — infinite loop for background orbs */
-export const floatLoop = (y = 20, duration_ = 6) => ({
-  animate: {
-    y: [0, -y, 0],
-    transition: {
-      duration: duration_,
-      ease: 'easeInOut',
-      repeat: Infinity,
-      repeatType: 'loop',
-    },
+/**
+ * Fade in — simple opacity entrance
+ */
+export const fadeIn = (delay = 0, dur = duration.base) => ({
+  hidden : { opacity: 0 },
+  show   : {
+    opacity: 1,
+    transition: { duration: dur, ease: ease.drift, delay },
+  },
+})
+
+/**
+ * Scale up from slightly small
+ */
+export const scaleUp = (delay = 0) => ({
+  hidden : { opacity: 0, scale: 0.94 },
+  show   : {
+    opacity: 1,
+    scale  : 1,
+    transition: { duration: duration.slow, ease: ease.cinematic, delay },
   },
 })
