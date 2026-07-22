@@ -1,18 +1,18 @@
 import { useEffect } from 'react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import Hero from './scenes/Hero/Hero'
 
 gsap.registerPlugin(ScrollTrigger)
 
 function App() {
   useEffect(() => {
-    // Global GSAP defaults
     gsap.defaults({ ease: 'power3.out' })
   }, [])
 
   return (
-    <main className="bg-void text-pure overflow-x-hidden">
-      {/* Scenes mount here — one at a time */}
+    <main style={{ background: '#050505', color: '#fff', overflowX: 'hidden' }}>
+      <Hero />
     </main>
   )
 }
