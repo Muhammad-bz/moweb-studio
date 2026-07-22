@@ -11,7 +11,13 @@ function App() {
   }, [])
 
   return (
-    <main style={{ background: '#050505', color: '#fff', overflowX: 'hidden' }}>
+    <main style={{
+      background: '#050505',
+      color: '#fff',
+      /* Use clip instead of hidden — clips visually but does NOT create
+         a new scroll container, so position:sticky keeps working */
+      overflowX: 'clip',
+    }}>
       <Hero />
     </main>
   )
