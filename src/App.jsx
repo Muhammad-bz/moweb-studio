@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import Hero from './scenes/Hero/Hero'
+import Hero from './scenes/hero/Hero'
 
 gsap.registerPlugin(ScrollTrigger)
 
