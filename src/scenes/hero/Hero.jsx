@@ -1,13 +1,12 @@
 /**
- * Hero.jsx — Orb Scroll Experience
+ * Hero.jsx — Orb Scroll Experience v3
  * Moweb Studio
- *
- * 5 smoky plasma orbs, each carrying a chapter of brand story.
- * Scroll-driven: orbs drift in from sides, hold, then zoom/fade out.
- * Text lives inside each orb, fades in after orb settles.
+ * - CSS-only orbs (no SVG feTurbulence) for smooth 60fps
+ * - vmin-based sizing for mobile/desktop
+ * - Proper sticky scroll
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 
 /* ─── Math helpers ─────────────────────────────────────────────── */
@@ -15,7 +14,7 @@ const clamp = (v, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v))
 const lerp   = (a, b, t) => a + (b - a) * t
 const slice  = (p, s, e) => clamp((p - s) / (e - s))
 const eio    = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2
-const eout   = t => 1 - Math.pow(1-t, 3)
+const eout   = t => 1 - Math.pow(1 - t, 3)
 
 /* ─── Scroll progress ──────────────────────────────────────────── */
 function useScrollProgress(ref) {
@@ -28,172 +27,82 @@ function useScrollProgress(ref) {
       setP(clamp(-top / (height - window.innerHeight)))
     }
     window.addEventListener('scroll', fn, { passive: true })
-    document.addEventListener('scroll', fn, { passive: true })
     fn()
-    return () => {
-      window.removeEventListener('scroll', fn)
-      document.removeEventListener('scroll', fn)
-    }
+    return () => window.removeEventListener('scroll', fn)
   }, [ref])
   return p
 }
 
-/* ─── Smoky Orb SVG ────────────────────────────────────────────── */
-function OrbSvg({ size = 500, seed = 0, animSpeed = 28 }) {
-  const id = `orb-${seed}`
-  // Different turbulence seeds per orb for variety
-  const freq = 0.008 + seed * 0.002
+/* ─── CSS Orb (no SVG filters — pure CSS for performance) ──────── */
+function CSSOrb({ animClass }) {
   return (
-    <svg
-      width={size} height={size}
-      viewBox="0 0 500 500"
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-    >
-      <defs>
-        <filter id={`smoke-${id}`} x="-20%" y="-20%" width="140%" height="140%">
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency={`${freq} ${freq}`}
-            numOctaves="4"
-            seed={seed * 7}
-            result="noise"
-          >
-            <animate
-              attributeName="baseFrequency"
-              values={`${freq} ${freq};${freq+0.003} ${freq+0.002};${freq} ${freq}`}
-              dur={`${animSpeed}s`}
-              repeatCount="indefinite"
-            />
-          </feTurbulence>
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale="55" xChannelSelector="R" yChannelSelector="G" result="displaced" />
-          <feGaussianBlur in="displaced" stdDeviation="3" result="blurred" />
-          <feComposite in="blurred" in2="SourceGraphic" operator="in" />
-        </filter>
-
-        {/* Glow ring */}
-        <radialGradient id={`glow-${id}`} cx="50%" cy="50%" r="50%">
-          <stop offset="0%"   stopColor="rgba(0,0,0,0)" />
-          <stop offset="72%"  stopColor="rgba(0,0,0,0)" />
-          <stop offset="84%"  stopColor={`rgba(255,255,255,${0.18 + seed*0.04})`} />
-          <stop offset="92%"  stopColor={`rgba(255,255,255,${0.55 + seed*0.05})`} />
-          <stop offset="97%"  stopColor="rgba(255,255,255,0.15)" />
-          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-        </radialGradient>
-
-        {/* Smoke fill — dark inside, wispy at edges */}
-        <radialGradient id={`fill-${id}`} cx="50%" cy="50%" r="50%">
-          <stop offset="0%"  stopColor="rgba(6,6,6,1)" />
-          <stop offset="55%" stopColor="rgba(10,10,10,0.97)" />
-          <stop offset="80%" stopColor="rgba(18,18,18,0.85)" />
-          <stop offset="92%" stopColor="rgba(30,30,30,0.4)" />
-          <stop offset="100%" stopColor="rgba(0,0,0,0)" />
-        </radialGradient>
-
-        <clipPath id={`circle-${id}`}>
-          <circle cx="250" cy="250" r="230" />
-        </clipPath>
-      </defs>
-
-      {/* Outer glow ring */}
-      <circle cx="250" cy="250" r="240" fill={`url(#glow-${id})`} />
-
-      {/* Dark smoke fill with turbulence displacement */}
-      <circle
-        cx="250" cy="250" r="230"
-        fill={`url(#fill-${id})`}
-        filter={`url(#smoke-${id})`}
-        clipPath={`url(#circle-${id})`}
-      />
-
-      {/* Inner smoke wisps — layered circles with varying opacity */}
-      {[0,1,2,3].map(i => (
-        <circle
-          key={i}
-          cx={250 + (i%2===0?-1:1)*18*i}
-          cy={250 + (i<2?-1:1)*14*i}
-          r={180 - i*22}
-          fill="none"
-          stroke={`rgba(255,255,255,${0.035 - i*0.006})`}
-          strokeWidth={28 - i*4}
-          filter={`url(#smoke-${id})`}
-          clipPath={`url(#circle-${id})`}
-        />
-      ))}
-
-      {/* Bright inner rim */}
-      <circle
-        cx="250" cy="250" r="228"
-        fill="none"
-        stroke="rgba(255,255,255,0.08)"
-        strokeWidth="1.5"
-      />
-    </svg>
+    <div className={`orb-shell ${animClass}`}>
+      {/* Glow ring */}
+      <div className="orb-glow" />
+      {/* Dark core */}
+      <div className="orb-core" />
+      {/* Smoke wisps — rotating layers */}
+      <div className="orb-wisp orb-wisp-1" />
+      <div className="orb-wisp orb-wisp-2" />
+      <div className="orb-wisp orb-wisp-3" />
+    </div>
   )
 }
 
 /* ─── Orb Chapter Config ───────────────────────────────────────── */
-// Each orb: scroll window [start, hold-start, hold-end, end]
-// enterFrom: 'left' | 'right' | 'bottom'
-// pos: [x%, y%] center of orb in viewport
 const ORBS = [
   {
     id: 0,
-    scroll: [0.00, 0.08, 0.16, 0.22],
+    scroll: [0.00, 0.08, 0.17, 0.23],
     enterFrom: 'left',
-    pos: [50, 50],
-    size: 520,
-    seed: 3,
-    speed: 32,
+    animClass: 'anim-slow',
     eyebrow: 'Motion-first web studio',
-    headline: 'We build\nexperiences\nworth feeling.',
+    headline: ['We build', 'experiences', 'worth feeling.'],
+    headlineWeights: [300, 700, 300],
     sub: null,
+    cta: false,
   },
   {
     id: 1,
-    scroll: [0.18, 0.26, 0.36, 0.42],
+    scroll: [0.19, 0.27, 0.37, 0.43],
     enterFrom: 'right',
-    pos: [52, 48],
-    size: 480,
-    seed: 7,
-    speed: 26,
+    animClass: 'anim-med',
     eyebrow: 'A question worth asking',
-    headline: 'What if your\nwebsite actually\nfelt alive?',
+    headline: ['What if your', 'website actually', 'felt alive?'],
+    headlineWeights: [300, 300, 700],
     sub: null,
+    cta: false,
   },
   {
     id: 2,
-    scroll: [0.38, 0.46, 0.56, 0.62],
+    scroll: [0.39, 0.47, 0.57, 0.63],
     enterFrom: 'left',
-    pos: [48, 52],
-    size: 560,
-    seed: 11,
-    speed: 38,
+    animClass: 'anim-fast',
     eyebrow: 'Our story',
-    headline: 'Born from\nfrustration.',
+    headline: ['Born from', 'frustration.'],
+    headlineWeights: [300, 700],
     sub: 'Every studio we saw was building pages — not experiences.',
+    cta: false,
   },
   {
     id: 3,
-    scroll: [0.58, 0.66, 0.76, 0.82],
+    scroll: [0.59, 0.67, 0.77, 0.83],
     enterFrom: 'right',
-    pos: [50, 50],
-    size: 500,
-    seed: 5,
-    speed: 30,
+    animClass: 'anim-slow',
     eyebrow: 'How we work',
-    headline: 'Motion is not\ndecoration.\nIt is the message.',
+    headline: ['Motion is not', 'decoration.', 'It is the message.'],
+    headlineWeights: [300, 700, 300],
     sub: null,
+    cta: false,
   },
   {
     id: 4,
-    scroll: [0.78, 0.86, 0.95, 1.00],
+    scroll: [0.79, 0.87, 0.96, 1.00],
     enterFrom: 'bottom',
-    pos: [50, 50],
-    size: 600,
-    seed: 9,
-    speed: 22,
+    animClass: 'anim-med',
     eyebrow: 'Ready when you are',
-    headline: "Let's begin.",
+    headline: ["Let's begin."],
+    headlineWeights: [700],
     sub: 'One studio. Precise motion. Zero compromise.',
     cta: true,
   },
@@ -202,108 +111,91 @@ const ORBS = [
 /* ─── Single Orb Scene ─────────────────────────────────────────── */
 function OrbScene({ orb, progress }) {
   const [s, holdS, holdE, e] = orb.scroll
+  const [hov, setHov] = useState(false)
+  const [hovGhost, setHovGhost] = useState(false)
 
-  // t=0 → t=1 across enter phase
-  const enterT  = eio(slice(progress, s, holdS))
-  // t=0 → t=1 across exit phase
-  const exitT   = eio(slice(progress, holdE, e))
-  // visibility: 1 during hold, 0 outside scroll window
-  const visible = progress >= s && progress <= e
+  if (progress < s - 0.06 || progress > e + 0.06) return null
 
-  if (!visible && progress > e + 0.05) return null
-  if (!visible && progress < s - 0.05) return null
+  const enterT = eio(slice(progress, s, holdS))
+  const exitT  = eio(slice(progress, holdE, e))
 
-  // Orb position: enters from side/bottom, settles at pos
-  const offX = orb.enterFrom === 'left'   ? -130
-             : orb.enterFrom === 'right'  ?  130
-             : 0
-  const offY = orb.enterFrom === 'bottom' ? 140 : 0
+  // Enter offset
+  const offX = orb.enterFrom === 'left' ? -110 : orb.enterFrom === 'right' ? 110 : 0
+  const offY = orb.enterFrom === 'bottom' ? 80 : 0
 
-  // During exit: zoom out and drift
-  const exitScale = lerp(1, 0.55, exitT)
-  const exitOp    = lerp(1, 0, eout(exitT))
+  const tx = lerp(offX, 0, enterT)
+  const ty = lerp(offY, 0, enterT)
 
-  const cx = lerp(offX, 0, enterT) // offset from center X in vw
-  const cy = lerp(offY, 0, enterT) // offset from center Y in vh
+  const scale   = lerp(0.78, 1, enterT) * lerp(1, 0.6, exitT)
+  const opacity = enterT * lerp(1, 0, eout(exitT))
 
-  // Text appears after orb settles (enterT > 0.75)
-  const textT = clamp((enterT - 0.75) / 0.25) * (1 - exitT * 2)
-  const textOp = clamp(textT)
-
-  const orbSize = orb.size
-  const halfOrb = orbSize / 2
+  // Text appears after orb settles
+  const textT  = clamp((enterT - 0.72) / 0.28) * (1 - clamp(exitT * 2.5))
+  const textOp = Math.max(0, textT)
+  const textTY = lerp(12, 0, textT)
 
   return (
     <div style={{
       position: 'absolute',
-      left: `${orb.pos[0]}%`,
-      top:  `${orb.pos[1]}%`,
-      width: orbSize,
-      height: orbSize,
-      transform: `
-        translate(-50%, -50%)
-        translateX(${cx}vw)
-        translateY(${cy}vh)
-        scale(${lerp(0.82, 1, enterT) * exitScale})
-      `,
-      opacity: exitT > 0 ? exitOp : enterT,
+      left: '50%', top: '50%',
+      transform: `translate(-50%, -50%) translateX(${tx}vw) translateY(${ty}vh) scale(${scale})`,
+      opacity,
       willChange: 'transform, opacity',
+      width: 'min(78vmin, 520px)',
+      height: 'min(78vmin, 520px)',
       pointerEvents: orb.cta ? 'auto' : 'none',
     }}>
-      {/* The orb graphic */}
-      <OrbSvg size={orbSize} seed={orb.seed} animSpeed={orb.speed} />
+      <CSSOrb animClass={orb.animClass} />
 
-      {/* Text inside the orb */}
+      {/* Text */}
       <div style={{
-        position: 'absolute',
-        inset: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
+        position: 'absolute', inset: 0,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
         textAlign: 'center',
-        padding: `${halfOrb * 0.22}px`,
+        padding: '18%',
         opacity: textOp,
-        transform: `translateY(${lerp(14, 0, textT)}px)`,
+        transform: `translateY(${textTY}px)`,
         willChange: 'opacity, transform',
         zIndex: 2,
+        pointerEvents: 'none',
       }}>
-        {/* Eyebrow */}
         <p style={{
-          fontSize: 'clamp(8px, 1vw, 11px)',
-          letterSpacing: '0.38em',
+          fontSize: 'clamp(7px, 1.8vw, 10px)',
+          letterSpacing: '0.36em',
           textTransform: 'uppercase',
-          color: 'rgba(255,255,255,0.3)',
-          margin: '0 0 16px',
+          color: 'rgba(255,255,255,0.28)',
+          margin: '0 0 clamp(10px, 2vw, 18px)',
           fontWeight: 400,
         }}>
           {orb.eyebrow}
         </p>
 
-        {/* Headline */}
         <h2 style={{
-          fontSize: orbSize > 540
-            ? 'clamp(22px, 3.8vw, 52px)'
-            : 'clamp(18px, 3vw, 42px)',
+          fontSize: orb.headline.length === 1
+            ? 'clamp(28px, 7vmin, 72px)'
+            : 'clamp(18px, 4.8vmin, 52px)',
           fontWeight: 700,
           letterSpacing: '-0.03em',
           lineHeight: 1.1,
           color: '#fff',
-          margin: '0 0 18px',
-          whiteSpace: 'pre-line',
-          maxWidth: orbSize * 0.55,
+          margin: orb.sub ? '0 0 clamp(10px, 2vw, 18px)' : 0,
         }}>
-          {orb.headline}
+          {orb.headline.map((line, i) => (
+            <span key={i} style={{
+              display: 'block',
+              fontWeight: orb.headlineWeights[i] || 700,
+              color: orb.headlineWeights[i] === 300 ? 'rgba(255,255,255,0.5)' : '#fff',
+            }}>{line}</span>
+          ))}
         </h2>
 
-        {/* Sub */}
         {orb.sub && (
           <p style={{
-            fontSize: 'clamp(11px, 1.1vw, 14px)',
+            fontSize: 'clamp(10px, 2.2vmin, 14px)',
             fontWeight: 300,
-            color: 'rgba(255,255,255,0.38)',
-            lineHeight: 1.7,
-            maxWidth: orbSize * 0.48,
+            color: 'rgba(255,255,255,0.35)',
+            lineHeight: 1.65,
             margin: 0,
             letterSpacing: '0.01em',
           }}>
@@ -311,62 +203,48 @@ function OrbScene({ orb, progress }) {
           </p>
         )}
 
-        {/* CTA buttons for last orb */}
         {orb.cta && (
-          <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <CTAButton primary>Start a Project</CTAButton>
-            <CTAButton>View Work ↗</CTAButton>
+          <div style={{
+            display: 'flex', gap: 10, marginTop: 'clamp(16px, 3vmin, 28px)',
+            flexWrap: 'wrap', justifyContent: 'center',
+            pointerEvents: 'auto',
+          }}>
+            <button
+              onMouseEnter={() => setHov(true)}
+              onMouseLeave={() => setHov(false)}
+              style={{
+                padding: 'clamp(9px, 1.5vmin, 13px) clamp(18px, 3vmin, 32px)',
+                border: '1px solid rgba(255,255,255,0.55)',
+                borderRadius: 1,
+                background: hov ? '#fff' : 'transparent',
+                color: hov ? '#000' : '#fff',
+                fontSize: 'clamp(8px, 1.6vmin, 11px)',
+                letterSpacing: '0.18em', textTransform: 'uppercase',
+                cursor: 'pointer', fontWeight: 500,
+                transition: 'background 0.2s, color 0.2s',
+                fontFamily: 'inherit',
+              }}>
+              Start a Project
+            </button>
+            <button
+              onMouseEnter={() => setHovGhost(true)}
+              onMouseLeave={() => setHovGhost(false)}
+              style={{
+                padding: 'clamp(9px, 1.5vmin, 13px) clamp(18px, 3vmin, 32px)',
+                border: 'none', borderRadius: 1,
+                background: 'none',
+                color: hovGhost ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)',
+                fontSize: 'clamp(8px, 1.6vmin, 11px)',
+                letterSpacing: '0.18em', textTransform: 'uppercase',
+                cursor: 'pointer', fontWeight: 500,
+                transition: 'color 0.2s',
+                fontFamily: 'inherit',
+              }}>
+              View Work ↗
+            </button>
           </div>
         )}
       </div>
-    </div>
-  )
-}
-
-/* ─── CTA Button ───────────────────────────────────────────────── */
-function CTAButton({ children, primary }) {
-  const [hov, setHov] = useState(false)
-  return (
-    <button
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        padding: 'clamp(10px, 1.2vw, 13px) clamp(20px, 2.5vw, 34px)',
-        border: primary ? '1px solid rgba(255,255,255,0.55)' : 'none',
-        borderRadius: 1,
-        background: primary ? (hov ? '#fff' : 'transparent') : 'none',
-        color: primary ? (hov ? '#000' : '#fff') : (hov ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.3)'),
-        fontSize: 'clamp(9px, 0.9vw, 11px)',
-        letterSpacing: '0.18em',
-        textTransform: 'uppercase',
-        cursor: 'pointer',
-        fontWeight: 500,
-        transition: 'background 0.22s, color 0.22s',
-        fontFamily: 'inherit',
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
-/* ─── Scroll hint ──────────────────────────────────────────────── */
-function ScrollHint({ progress }) {
-  const op = Math.max(0, 1 - eio(slice(progress, 0.04, 0.12)))
-  return (
-    <div style={{
-      position: 'absolute', bottom: 32, left: '50%',
-      transform: 'translateX(-50%)',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-      opacity: op, pointerEvents: 'none',
-      transition: 'opacity 0.4s',
-    }}>
-      <span style={{ fontSize: 8, letterSpacing: '0.32em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.16)' }}>Scroll</span>
-      <motion.div
-        animate={{ y: [0, 9, 0] }}
-        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-        style={{ width: 0.5, height: 38, background: 'linear-gradient(to bottom, rgba(255,255,255,0.2), transparent)' }}
-      />
     </div>
   )
 }
@@ -376,59 +254,57 @@ export default function Hero() {
   const containerRef = useRef(null)
   const progress     = useScrollProgress(containerRef)
 
-  // Subtle background pulse based on scroll
-  const bgLuminance = lerp(0.018, 0.032, Math.sin(progress * Math.PI))
+  const scrollHintOp = Math.max(0, 1 - eio(slice(progress, 0.04, 0.12)))
 
   return (
     <>
       <section
         ref={containerRef}
-        style={{ height: '700vh', position: 'relative', display: 'block', overflow: 'visible' }}
+        style={{ height: '700vh', position: 'relative' }}
       >
         <div style={{
-          position: 'sticky', top: 0, height: '100vh',
-          overflow: 'hidden',
-          background: `radial-gradient(ellipse 80% 80% at 50% 50%, rgba(255,255,255,${bgLuminance}) 0%, #060606 70%)`,
+          position: 'sticky', top: 0,
+          height: '100vh',
+          background: '#060606',
+          // No overflow:hidden here — that breaks sticky on some browsers
+          // Use clip on x only via the global style
         }}>
 
           {/* Wordmark */}
           <div style={{
-            position: 'absolute', top: 28, left: 24, zIndex: 20,
-            display: 'flex', alignItems: 'baseline', gap: 8,
-            opacity: 0.9,
+            position: 'absolute', top: 24, left: 20, zIndex: 20,
+            display: 'flex', alignItems: 'baseline', gap: 7,
+            userSelect: 'none',
           }}>
-            <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', color: '#fff', userSelect: 'none' }}>MOWEB</span>
-            <span style={{ fontSize: 12, fontWeight: 300, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.28)', userSelect: 'none' }}>STUDIO</span>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: '#fff' }}>MOWEB</span>
+            <span style={{ fontSize: 11, fontWeight: 300, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.25)' }}>STUDIO</span>
           </div>
 
           {/* Nav */}
           <div style={{
-            position: 'absolute', top: 28, right: 24, zIndex: 20,
-            display: 'flex', gap: 28,
+            position: 'absolute', top: 24, right: 20, zIndex: 20,
+            display: 'flex', gap: 24,
           }}>
             {['Work','Process','Contact'].map(l => (
               <span key={l} style={{
-                fontSize: 10, letterSpacing: '0.2em',
+                fontSize: 9, letterSpacing: '0.22em',
                 textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.25)',
+                color: 'rgba(255,255,255,0.22)',
                 cursor: 'pointer',
               }}>{l}</span>
             ))}
           </div>
 
-          {/* Orb scenes */}
+          {/* Orbs */}
           {ORBS.map(orb => (
             <OrbScene key={orb.id} orb={orb} progress={progress} />
           ))}
 
-          {/* Scroll hint */}
-          <ScrollHint progress={progress} />
-
           {/* Progress dots */}
           <div style={{
-            position: 'absolute', right: 24, top: '50%',
+            position: 'absolute', right: 18, top: '50%',
             transform: 'translateY(-50%)',
-            display: 'flex', flexDirection: 'column', gap: 10,
+            display: 'flex', flexDirection: 'column', gap: 8,
             zIndex: 20,
           }}>
             {ORBS.map((orb, i) => {
@@ -438,13 +314,34 @@ export default function Hero() {
               return (
                 <div key={i} style={{
                   width: active ? 2 : 1,
-                  height: active ? 20 : 10,
-                  background: active ? 'rgba(255,255,255,0.7)' : past ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+                  height: active ? 18 : 8,
+                  background: active
+                    ? 'rgba(255,255,255,0.65)'
+                    : past
+                    ? 'rgba(255,255,255,0.18)'
+                    : 'rgba(255,255,255,0.07)',
                   borderRadius: 1,
                   transition: 'all 0.4s ease',
                 }} />
               )
             })}
+          </div>
+
+          {/* Scroll hint */}
+          <div style={{
+            position: 'absolute', bottom: 28, left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
+            opacity: scrollHintOp,
+            transition: 'opacity 0.4s',
+            pointerEvents: 'none',
+          }}>
+            <span style={{ fontSize: 7, letterSpacing: '0.34em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.14)' }}>Scroll</span>
+            <motion.div
+              animate={{ y: [0, 8, 0] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ width: 0.5, height: 34, background: 'linear-gradient(to bottom, rgba(255,255,255,0.18), transparent)' }}
+            />
           </div>
 
         </div>
@@ -458,10 +355,117 @@ export default function Hero() {
           overflow-y: auto;
           height: auto;
           min-height: 100%;
-          font-family: -apple-system, 'Helvetica Neue', sans-serif;
+          font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
         }
+
+        /* ── CSS Orb ── */
+        .orb-shell {
+          position: absolute;
+          inset: 0;
+          border-radius: 50%;
+          will-change: transform;
+        }
+
+        /* Glow ring */
+        .orb-glow {
+          position: absolute; inset: -2%;
+          border-radius: 50%;
+          background: radial-gradient(
+            circle at 50% 50%,
+            transparent 68%,
+            rgba(255,255,255,0.04) 76%,
+            rgba(255,255,255,0.55) 84%,
+            rgba(255,255,255,0.65) 87%,
+            rgba(255,255,255,0.18) 92%,
+            transparent 100%
+          );
+        }
+
+        /* Dark core */
+        .orb-core {
+          position: absolute; inset: 4%;
+          border-radius: 50%;
+          background: radial-gradient(
+            circle at 42% 42%,
+            #0a0a0a 0%,
+            #070707 55%,
+            rgba(12,12,12,0.9) 80%,
+            transparent 100%
+          );
+        }
+
+        /* Smoke wisps — CSS blur + rotate */
+        .orb-wisp {
+          position: absolute;
+          border-radius: 50%;
+          mix-blend-mode: screen;
+          will-change: transform;
+        }
+
+        .orb-wisp-1 {
+          inset: 8%;
+          background: conic-gradient(
+            from 0deg,
+            transparent 0%,
+            rgba(255,255,255,0.06) 12%,
+            transparent 25%,
+            rgba(255,255,255,0.04) 40%,
+            transparent 55%,
+            rgba(255,255,255,0.07) 70%,
+            transparent 85%,
+            rgba(255,255,255,0.03) 100%
+          );
+          filter: blur(6px);
+        }
+
+        .orb-wisp-2 {
+          inset: 16%;
+          background: conic-gradient(
+            from 120deg,
+            transparent 0%,
+            rgba(255,255,255,0.05) 15%,
+            transparent 30%,
+            rgba(255,255,255,0.08) 50%,
+            transparent 65%,
+            rgba(255,255,255,0.04) 80%,
+            transparent 100%
+          );
+          filter: blur(8px);
+        }
+
+        .orb-wisp-3 {
+          inset: 24%;
+          background: conic-gradient(
+            from 240deg,
+            transparent 0%,
+            rgba(255,255,255,0.04) 20%,
+            transparent 40%,
+            rgba(255,255,255,0.06) 60%,
+            transparent 80%,
+            transparent 100%
+          );
+          filter: blur(10px);
+        }
+
+        /* Rotation animations — different speeds per orb */
+        .anim-slow .orb-wisp-1 { animation: spin-cw  38s linear infinite; }
+        .anim-slow .orb-wisp-2 { animation: spin-ccw 52s linear infinite; }
+        .anim-slow .orb-wisp-3 { animation: spin-cw  44s linear infinite; }
+
+        .anim-med .orb-wisp-1  { animation: spin-cw  26s linear infinite; }
+        .anim-med .orb-wisp-2  { animation: spin-ccw 34s linear infinite; }
+        .anim-med .orb-wisp-3  { animation: spin-cw  30s linear infinite; }
+
+        .anim-fast .orb-wisp-1 { animation: spin-ccw 20s linear infinite; }
+        .anim-fast .orb-wisp-2 { animation: spin-cw  28s linear infinite; }
+        .anim-fast .orb-wisp-3 { animation: spin-ccw 24s linear infinite; }
+
+        @keyframes spin-cw  { from { transform: rotate(0deg);   } to { transform: rotate(360deg);  } }
+        @keyframes spin-ccw { from { transform: rotate(0deg);   } to { transform: rotate(-360deg); } }
+
         @media (max-width: 600px) {
-          /* Scale orbs down on mobile */
+          /* Nav hidden on small screens */
+          .mw-nav { display: none !important; }
         }
       `}</style>
     </>
