@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import Hero1 from './scenes/hero/Hero1'
-import Hero2 from './scenes/hero/Hero2'
+import Navbar from './scenes/hero/Navbar'
+import Hero1  from './scenes/hero/Hero1'
+import Hero2  from './scenes/hero/Hero2'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -17,9 +18,13 @@ function App() {
       color: '#fff',
       overflowX: 'clip',
     }}>
-      {/* Story hero — appears first (1100vh) */}
+      {/* Single shared nav — fixed, above everything */}
+      <Navbar />
+
+      {/* Story hero (1100vh) → warp exit → */}
       <Hero1 />
-      {/* Points / spheres hero — appears second (1500vh) */}
+
+      {/* Sphere hero (1500vh) ← arrival burst ← */}
       <Hero2 />
     </main>
   )
