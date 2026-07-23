@@ -369,13 +369,17 @@ export default function Hero2({ active = false, onExit }) {
       const t  = ts * 0.001
       const st = stepRef.current
 
-      // Only advance animation clock while Hero2 is the active scene.
-      // If we let it run freely, animTRef reaches 1.0 before the user ever
-      // sees Hero2, causing overview labels to snap to full opacity on entry.
+      // Advance the animation clock only while active. If we let it run freely
+      // when inactive, animTRef reaches 1.0 before the user sees Hero2, causing
+      // overview labels to snap to full opacity on entry.
+      // We still draw every frame regardless of active so the spheres are
+      // visible the instant Hero1 fades away — active only gates the clock.
       if (activeRef.current) {
         animTRef.current = Math.min(1, animTRef.current + ANIM_SPEED)
       }
-      const rawT = animTRef.current
+      // While inactive, keep rawT=0 so getOrbState returns the resting pose
+      // (all four orbs in their grid positions, no zoom in progress).
+      const rawT = activeRef.current ? animTRef.current : 0
 
       const { activeOrb, zoomT } = getOrbState(st, rawT)
 

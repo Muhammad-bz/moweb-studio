@@ -73,11 +73,19 @@ function DotField({ stepRef }) {
     window.addEventListener('resize', resize)
 
     let lastTs = 0
+    let warpStartTs = -1   // timestamp when warp began; -1 = not warping
+    const WARP_DURATION = 1.4  // seconds — matches the CSS opacity transition
+
     const draw = ts => {
       const dt = Math.min((ts - lastTs) * 0.001, 0.05); lastTs = ts
       const t  = ts * 0.001
       const step = stepRef.current ?? 0
-      const warpT = step >= WARP_STEP ? eio(clamp((step - WARP_STEP + 1) / 1)) : 0
+
+      // Track when we first entered warp step so warpT ramps 0→1 over time
+      // instead of snapping to 1 instantly (which caused an immediate black canvas).
+      if (step >= WARP_STEP && warpStartTs < 0) warpStartTs = ts
+      if (step < WARP_STEP) warpStartTs = -1
+      const warpT = warpStartTs >= 0 ? eio(clamp((ts - warpStartTs) / 1000 / WARP_DURATION)) : 0
 
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
       ctx.fillStyle = '#060606'
