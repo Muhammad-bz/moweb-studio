@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import Hero from './scenes/hero/Hero'
+import Hero1 from './scenes/hero/Hero1'
+import Hero2 from './scenes/hero/Hero2'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -14,11 +15,12 @@ function App() {
     <main style={{
       background: '#050505',
       color: '#fff',
-      /* Use clip instead of hidden — clips visually but does NOT create
-         a new scroll container, so position:sticky keeps working */
       overflowX: 'clip',
     }}>
-      <Hero />
+      {/* Story hero — appears first (1100vh) */}
+      <Hero1 />
+      {/* Points / spheres hero — appears second (1500vh) */}
+      <Hero2 />
     </main>
   )
 }

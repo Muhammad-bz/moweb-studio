@@ -1,13 +1,18 @@
 /**
- * Hero.jsx — Four Particle Spheres · Zoom-Through Scroll
+ * Hero2.jsx — Four Particle Spheres · Zoom-Through Scroll
+ * Moweb Studio
  *
- * Fixes applied:
- * - Double-text glitch: strict non-overlapping segment boundaries
- * - Globe transition: zoom-out (pinch) then zoom-in to next globe
- * - Zero Compromise: last orb text stays visible — no fade-out
- * - MOWEB STUDIO logo fixed to true top-left alignment
- * - Text overlap from orb 2 on orb 4 fixed (strict segment clamp)
- * - Performance: RAF-throttled scroll + DPR capped at 2
+ * This is the "points" hero — appears after Hero1.
+ * Export name changed to Hero2 to avoid collision.
+ *
+ * Fixes vs original:
+ *   • Scroll speed: 1500vh (was 1100vh) — longer, slower experience
+ *   • Text glitches: TextOverlay now uses strict opacity gate
+ *     (returns null below 0.008) — unchanged from source; confirmed clean
+ *   • Hover stuck: "Let's Begin" / CTA buttons use CSS class hover,
+ *     not inline onMouseEnter state that got stuck during scroll re-renders
+ *   • "Let's begin" tab removed — the last orb (Zero Compromise) ends
+ *     with "Start a Project / View Work" CTA only; no separate tab chapter
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -29,22 +34,21 @@ const POINTS = [
 ]
 
 /*
-  Scroll map  (total section = 1100vh)
-  0.00-0.09   intro  : all 4 orbs materialize
-  0.09-0.13   overview: brief moment, all visible
-  0.13-0.35   orb 0
-  0.35-0.57   orb 1
-  0.57-0.79   orb 2
-  0.79-1.00   orb 3  (ends with CTA)
+  Scroll map (total section = 1500vh — was 1100vh, now slower)
+  0.00–0.09   intro  : all 4 orbs materialize
+  0.09–0.13   overview
+  0.13–0.35   orb 0
+  0.35–0.57   orb 1
+  0.57–0.79   orb 2
+  0.79–1.00   orb 3
 */
 const SEG_SIZE = 0.22
 const SEGS = POINTS.map((_, i) => {
   const base = 0.13 + i * SEG_SIZE
   return {
-    zoomIn:   [base,                    base + 0.12],
-    inside:   [base + 0.12,             base + SEG_SIZE],
-    // pinch-out window: last 4% of segment (creates zoom-out before next orb)
-    pinchOut: [base + SEG_SIZE - 0.04,  base + SEG_SIZE],
+    zoomIn:   [base,                   base + 0.12],
+    inside:   [base + 0.12,            base + SEG_SIZE],
+    pinchOut: [base + SEG_SIZE - 0.04, base + SEG_SIZE],
   }
 })
 
@@ -54,7 +58,6 @@ const ORB_LOCS = [
   [0.27, 0.645],
   [0.73, 0.645],
 ]
-
 const ROT_OFFSETS = [0, 1.15, 2.32, 3.74]
 
 /* ─── Geometry ─────────────────────────────────────────────────── */
@@ -68,12 +71,7 @@ function fibSphere(n) {
   })
 }
 
-const SPHERE_SETS = [
-  fibSphere(340),
-  fibSphere(210),
-  fibSphere(290),
-  fibSphere(460),
-]
+const SPHERE_SETS = [fibSphere(340), fibSphere(210), fibSphere(290), fibSphere(460)]
 
 const RING_CONFIGS = [
   [[130,  0, 1.48]],
@@ -134,13 +132,11 @@ function useScrollProgress(ref) {
   return { progress: p, progressRef: latest }
 }
 
-/* ─── Scene state — strict non-overlapping boundaries ──────────── */
+/* ─── Scene state — strict non-overlapping ──────────────────────── */
 function getSceneState(progress) {
   let activeOrb = -1, phase = 'none', phaseT = 0
-
   for (let i = 0; i < SEGS.length; i++) {
     const { zoomIn, inside } = SEGS[i]
-    // Strict boundary: [segStart, segEnd) — no segment overlaps
     if (progress >= zoomIn[0] && progress < inside[1]) {
       activeOrb = i
       if (progress <= zoomIn[1]) {
@@ -163,21 +159,17 @@ function TextOverlay({ activeOrb, phase, phaseT }) {
 
   let textAlpha = 0
   if (phase === 'zoomin') {
-    // Fade in during the last 20% of zoom-in
     textAlpha = phaseT > 0.80 ? (phaseT - 0.80) / 0.20 : 0
   } else if (phase === 'inside') {
     if (isLastOrb) {
-      // Last orb: already fully visible from zoomin — hold at 1, never fade out
       textAlpha = 1
     } else {
-      // Other orbs: already at 1 from zoomin — hold, then brief fade at last 8%
       const holdEnd = 0.92
       textAlpha = phaseT < holdEnd ? 1 : 1 - (phaseT - holdEnd) / (1 - holdEnd)
     }
   }
   textAlpha = clamp(textAlpha)
 
-  // Only slide up during zoomin — once inside, always at rest position
   const translateY = phase === 'zoomin' ? lerp(22, 0, textAlpha) : 0
   if (!pt || textAlpha < 0.008) return null
 
@@ -187,98 +179,109 @@ function TextOverlay({ activeOrb, phase, phaseT }) {
   const glowBox  = `0 0 20px 6px rgba(${r},${g},${b},0.5)`
 
   return (
-    <div style={{
-      position: 'absolute', inset: 0, zIndex: 10,
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      pointerEvents: 'none',
-    }}>
-      <div style={{
-        position: 'absolute',
-        top: '13%', left: '50%',
-        transform: 'translateX(-50%)',
-        opacity: textAlpha,
-        fontSize: 9,
-        letterSpacing: '0.44em',
-        textTransform: 'uppercase',
-        color,
-        fontWeight: 400,
-        whiteSpace: 'nowrap',
-      }}>
-        {`0${activeOrb + 1} / 0${POINTS.length}`}
-      </div>
+    <>
+      {/* CSS-class CTA buttons — no stuck hover state */}
+      <style>{`
+        .h2-btn-primary {
+          padding: 11px 28px;
+          border: 1px solid ${color};
+          border-radius: 2px;
+          background: transparent;
+          color: ${color};
+          font-size: 9px;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          cursor: pointer;
+          font-family: inherit;
+          transition: background 0.22s, color 0.22s;
+        }
+        .h2-btn-primary:hover { background: ${color}; color: #000; }
+        .h2-btn-ghost {
+          padding: 11px 28px;
+          border: none;
+          background: none;
+          color: ${colorDim};
+          font-size: 9px;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          cursor: pointer;
+          font-family: inherit;
+          transition: color 0.22s;
+        }
+        .h2-btn-ghost:hover { color: ${color}; }
+      `}</style>
 
       <div style={{
-        opacity: textAlpha,
-        textAlign: 'center',
-        transform: `translateY(${translateY}px)`,
+        position: 'absolute', inset: 0, zIndex: 10,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        pointerEvents: 'none',
       }}>
+        {/* Counter */}
         <div style={{
-          width: 5, height: 5, borderRadius: '50%',
-          background: color,
-          margin: '0 auto 18px',
-          boxShadow: glowBox,
-        }} />
-
-        <h2 style={{
-          fontSize: 'clamp(24px, 5.8vmin, 52px)',
-          fontWeight: 700,
-          letterSpacing: '-0.015em',
+          position: 'absolute',
+          top: '13%', left: '50%',
+          transform: 'translateX(-50%)',
+          opacity: textAlpha,
+          fontSize: 9,
+          letterSpacing: '0.44em',
+          textTransform: 'uppercase',
           color,
-          margin: '0 0 12px',
-          lineHeight: 1.05,
+          fontWeight: 400,
+          whiteSpace: 'nowrap',
         }}>
-          {pt.label}
-        </h2>
+          {`0${activeOrb + 1} / 0${POINTS.length}`}
+        </div>
 
-        <p style={{
-          fontSize: 'clamp(11px, 2vmin, 15px)',
-          color: colorDim,
-          letterSpacing: '0.07em',
-          margin: 0,
-          fontWeight: 300,
+        {/* Label */}
+        <div style={{
+          opacity: textAlpha,
+          textAlign: 'center',
+          transform: `translateY(${translateY}px)`,
         }}>
-          {pt.sub}
-        </p>
-
-        {activeOrb === 3 && phase === 'inside' && phaseT > 0.35 && (
           <div style={{
-            marginTop: 32,
-            opacity: clamp((phaseT - 0.35) / 0.3),
-            display: 'flex', gap: 12, justifyContent: 'center',
-            pointerEvents: 'auto',
+            width: 5, height: 5, borderRadius: '50%',
+            background: color,
+            margin: '0 auto 18px',
+            boxShadow: glowBox,
+          }} />
+
+          <h2 style={{
+            fontSize: 'clamp(24px, 5.8vmin, 52px)',
+            fontWeight: 700,
+            letterSpacing: '-0.015em',
+            color,
+            margin: '0 0 12px',
+            lineHeight: 1.05,
           }}>
-            <button style={{
-              padding: '11px 28px',
-              border: `1px solid ${color}`,
-              borderRadius: 2,
-              background: 'transparent',
-              color,
-              fontSize: 9,
-              letterSpacing: '0.22em',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
+            {pt.label}
+          </h2>
+
+          <p style={{
+            fontSize: 'clamp(11px, 2vmin, 15px)',
+            color: colorDim,
+            letterSpacing: '0.07em',
+            margin: 0,
+            fontWeight: 300,
+          }}>
+            {pt.sub}
+          </p>
+
+          {/* CTA — last orb only */}
+          {activeOrb === 3 && phase === 'inside' && phaseT > 0.35 && (
+            <div style={{
+              marginTop: 32,
+              opacity: clamp((phaseT - 0.35) / 0.3),
+              display: 'flex', gap: 12, justifyContent: 'center',
+              pointerEvents: 'auto',
             }}>
-              Start a Project
-            </button>
-            <button style={{
-              padding: '11px 28px',
-              border: 'none',
-              background: 'none',
-              color: colorDim,
-              fontSize: 9,
-              letterSpacing: '0.22em',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}>
-              View Work ↗
-            </button>
-          </div>
-        )}
+              <button className="h2-btn-primary">Start a Project</button>
+              <button className="h2-btn-ghost">View Work ↗</button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -287,7 +290,6 @@ function OverviewLabels({ progress }) {
   const showT = clamp(eout(slice(progress, 0.06, 0.13)))
   const hideT = clamp(eout(slice(progress, 0.13, 0.17)))
   const alpha = showT * (1 - hideT)
-
   if (alpha < 0.005) return null
 
   return (
@@ -361,12 +363,11 @@ function ChapterDots({ progress }) {
 }
 
 /* ─── MAIN ──────────────────────────────────────────────────────── */
-export default function Hero() {
+export default function Hero2() {
   const containerRef = useRef(null)
   const canvasRef    = useRef(null)
   const { progress, progressRef } = useScrollProgress(containerRef)
 
-  /* ── Canvas draw loop ────────────────────────────────────────── */
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -375,7 +376,7 @@ export default function Hero() {
     let W = 0, H = 0, DPR = 1
 
     const resize = () => {
-      DPR = Math.min(window.devicePixelRatio || 1, 2) // cap DPR at 2 for perf
+      DPR = Math.min(window.devicePixelRatio || 1, 2)
       W   = window.innerWidth
       H   = window.innerHeight
       canvas.width  = W * DPR
@@ -391,7 +392,6 @@ export default function Hero() {
       const p = progressRef.current
 
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
-
       ctx.fillStyle = '#020409'
       ctx.fillRect(0, 0, W, H)
 
@@ -433,13 +433,10 @@ export default function Hero() {
           } else {
             cx = W * 0.5
             cy = H * 0.5
-
-            // Pinch-out: briefly zoom back before transitioning to next orb
             const isLastOrb  = i === POINTS.length - 1
             const pinchStart = SEGS[i].pinchOut[0]
             const pinchEnd   = SEGS[i].pinchOut[1]
             const isPinching = !isLastOrb && p >= pinchStart
-
             if (isPinching) {
               const pinchT   = eio(slice(p, pinchStart, pinchEnd))
               const currentR = maxR * lerp(1, 1.45, sq(phaseT))
@@ -513,7 +510,7 @@ export default function Hero() {
         }
       }
 
-      /* Cross-fade flash at transition (not on last orb) */
+      /* Cross-fade flash at transition */
       if (activeOrb >= 0 && activeOrb < 3 && phase === 'inside' && phaseT > 0.82) {
         const flashT        = (phaseT - 0.82) / 0.18
         const [r,  g,  b]  = POINTS[activeOrb].rgb
@@ -541,7 +538,7 @@ export default function Hero() {
 
   return (
     <>
-      <section ref={containerRef} style={{ height: '1100vh', position: 'relative' }}>
+      <section ref={containerRef} style={{ height: '1500vh', position: 'relative' }}>
         <div style={{
           position: 'sticky', top: 0, height: '100vh', overflow: 'hidden',
         }}>
@@ -552,44 +549,22 @@ export default function Hero() {
           <TextOverlay activeOrb={activeOrb} phase={phase} phaseT={phaseT} />
           <ChapterDots progress={progress} />
 
-          {/* Wordmark — true top-left alignment */}
+          {/* Wordmark */}
           <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            zIndex: 20,
+            position: 'absolute', top: 0, left: 0, zIndex: 20,
             padding: '20px 18px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 7,
+            display: 'flex', alignItems: 'center', gap: 7,
             userSelect: 'none',
           }}>
-            <span style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.13em',
-              color: '#fff',
-              lineHeight: 1,
-            }}>MOWEB</span>
-            <span style={{
-              fontSize: 11,
-              fontWeight: 300,
-              letterSpacing: '0.17em',
-              color: 'rgba(255,255,255,0.26)',
-              lineHeight: 1,
-            }}>STUDIO</span>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.13em', color: '#fff', lineHeight: 1 }}>MOWEB</span>
+            <span style={{ fontSize: 11, fontWeight: 300, letterSpacing: '0.17em', color: 'rgba(255,255,255,0.26)', lineHeight: 1 }}>STUDIO</span>
           </div>
 
           {/* Nav */}
           <div style={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            zIndex: 20,
+            position: 'absolute', top: 0, right: 0, zIndex: 20,
             padding: '22px 44px',
-            display: 'flex',
-            gap: 24,
-            alignItems: 'center',
+            display: 'flex', gap: 24, alignItems: 'center',
           }}>
             {['Work', 'Process', 'Contact'].map(l => (
               <span key={l} style={{
@@ -615,7 +590,7 @@ export default function Hero() {
               fontSize: 7, letterSpacing: '0.36em',
               textTransform: 'uppercase', color: 'rgba(255,255,255,0.13)',
             }}>Scroll</span>
-            <div className="scroll-line" />
+            <div className="h2-scroll-line" />
           </div>
 
         </div>
@@ -623,15 +598,14 @@ export default function Hero() {
 
       <style>{`
         * { box-sizing: border-box; }
-        .scroll-line {
-          width: 0.5px;
-          height: 30px;
+        .h2-scroll-line {
+          width: 0.5px; height: 30px;
           background: linear-gradient(to bottom, rgba(255,255,255,0.22), transparent);
-          animation: scrollPulse 2.2s ease-in-out infinite;
+          animation: h2ScrollPulse 2.2s ease-in-out infinite;
         }
-        @keyframes scrollPulse {
-          0%,100% { opacity: 0.28; transform: scaleY(0.85); }
-          50%      { opacity: 1.00; transform: scaleY(1.15); }
+        @keyframes h2ScrollPulse {
+          0%,100% { opacity:0.28; transform:scaleY(0.85); }
+          50%      { opacity:1.00; transform:scaleY(1.15); }
         }
       `}</style>
     </>
