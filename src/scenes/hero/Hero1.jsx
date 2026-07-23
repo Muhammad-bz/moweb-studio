@@ -326,15 +326,22 @@ export default function Hero1({ onComplete, resumeFromEnd = false, active = true
         blockWarpRef.current = false
       }
 
+      // Compute next step eagerly so we can call setIsWarp outside the updater.
+      // State updater functions must be pure — side effects inside them are
+      // unreliable in React's concurrent mode and can silently drop.
       setStep(prev => {
         const next = prev + dir
         if (next < 0) return 0
         if (next > WARP_STEP) return prev
-        if (next === WARP_STEP && !blockWarpRef.current) {
-          setIsWarp(true)
-        }
         return next
       })
+
+      // Trigger warp AFTER computing the intended next step
+      const currentStep = stepRef.current
+      const nextStep = Math.max(0, Math.min(currentStep + dir, WARP_STEP))
+      if (nextStep === WARP_STEP && !blockWarpRef.current) {
+        setIsWarp(true)
+      }
     }
 
     const onWheel = (e) => {

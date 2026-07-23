@@ -268,6 +268,7 @@ export default function Hero2({ active = false, onExit }) {
   // TextOverlay and OverviewLabels read it directly via their own RAF loops —
   // no React state means no render-cycle lag and no flash frames.
   const animTRef   = useRef(0)
+  const activeRef  = useRef(active)  // lets the canvas RAF check active without closing over stale value
   const lockedRef  = useRef(false)
 
   const floatY = useFloat(9, 4600)
@@ -277,6 +278,11 @@ export default function Hero2({ active = false, onExit }) {
     stepRef.current  = step
     animTRef.current = 0
   }, [step])
+
+  // Keep activeRef current so the canvas RAF can check it without stale closure
+  useEffect(() => {
+    activeRef.current = active
+  }, [active])
 
   // Reset step to 0 when Hero2 becomes inactive (returning from Hero2)
   useEffect(() => {
@@ -363,7 +369,12 @@ export default function Hero2({ active = false, onExit }) {
       const t  = ts * 0.001
       const st = stepRef.current
 
-      animTRef.current = Math.min(1, animTRef.current + ANIM_SPEED)
+      // Only advance animation clock while Hero2 is the active scene.
+      // If we let it run freely, animTRef reaches 1.0 before the user ever
+      // sees Hero2, causing overview labels to snap to full opacity on entry.
+      if (activeRef.current) {
+        animTRef.current = Math.min(1, animTRef.current + ANIM_SPEED)
+      }
       const rawT = animTRef.current
 
       const { activeOrb, zoomT } = getOrbState(st, rawT)
