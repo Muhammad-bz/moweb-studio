@@ -192,12 +192,6 @@ function IntroOverlay({ onDone }) {
 }
 
 /* ─── Chapter slide component ───────────────────────────────────── */
-// TWO-DIV PATTERN — critical for correct animation:
-//   Outer div: applies floatY directly with NO CSS transition. Float updates
-//              every RAF frame; putting it on the same div as the step-change
-//              transition re-armed the delay every frame → text flew off-screen.
-//   Inner div: handles opacity + X slide with enter-delay so the outgoing
-//              chapter fades before the incoming one appears.
 function Chapter({ visible, fromLeft = true, floatY = 0, children }) {
   const xOut = fromLeft ? 60 : -60
   return (
@@ -206,9 +200,7 @@ function Chapter({ visible, fromLeft = true, floatY = 0, children }) {
       display:'flex', alignItems:'center', justifyContent:'center',
       pointerEvents:'none',
     }}>
-      {/* Float wrapper — raw direct value, zero CSS transition */}
       <div style={{ transform: `translateY(${floatY}px)` }}>
-        {/* Step-change wrapper — transitions only opacity + X */}
         <div style={{
           opacity:   visible ? 1 : 0,
           transform: visible ? 'translateX(0px)' : `translateX(${xOut}px)`,
@@ -289,56 +281,64 @@ function GeometryGrid({ visible }) {
 }
 
 /* ─── MAIN ──────────────────────────────────────────────────────── */
-export default function Hero1({ onComplete, resumeFromEnd = false }) {
+export default function Hero1({ onComplete, resumeFromEnd = false, active = true }) {
   const [step, setStep]           = useState(0)
   const [introGone, setIntroGone] = useState(false)
   const stepRef                   = useRef(0)
-  const lockedRef                 = useRef(false)   // debounce between steps
-  // Internal flag: true while we're in "resumed from Hero2" mode.
-  // Cleared as soon as the user scrolls forward again (re-triggering warp).
-  const [isResumed, setIsResumed] = useState(false)
+  const lockedRef                 = useRef(false)
+  // Ref (not state) so clearing it never causes a re-render race with the
+  // warp transition. true = currently resumed from Hero2, block warp.
+  const blockWarpRef              = useRef(false)
+  const [isWarp, setIsWarp]       = useState(false)
   const onIntroDone = useCallback(() => setIntroGone(true), [])
 
   // Sync stepRef for canvas
   useEffect(() => { stepRef.current = step }, [step])
 
-  // When resumeFromEnd flips true (Hero2 called onExit), snap Hero1 back to
-  // its final content step (5) so the user can scroll backwards naturally.
+  // When resumeFromEnd flips true (Hero2 called onExit), snap back to step 5.
   useEffect(() => {
     if (resumeFromEnd) {
+      blockWarpRef.current = true
+      setIsWarp(false)
       const resumeStep = WARP_STEP - 1
       setStep(resumeStep)
       stepRef.current = resumeStep
       setIntroGone(true)
-      setIsResumed(true)
     }
   }, [resumeFromEnd])
 
-  /* ── Discrete scroll / wheel / key handler ── */
+  /* ── Scroll handler ── */
   useEffect(() => {
-    if (!introGone) return
-
     let wheelAccum = 0
-    const THRESH = 60  // px of deltaY to trigger one step
+    const THRESH = 60
 
     const advance = (dir) => {
+      // Always consume the event, but only act after intro
+      if (!introGone) return
+      // Hero2 is active — Hero1 should not respond
+      if (!active) return
       if (lockedRef.current) return
       lockedRef.current = true
-      setTimeout(() => { lockedRef.current = false }, 700) // debounce 700ms
+      setTimeout(() => { lockedRef.current = false }, 700)
 
-      // Scrolling forward while resumed clears the resume guard so warp
-      // can fire again normally on the next step change.
-      if (dir > 0) setIsResumed(false)
+      if (dir > 0) {
+        // Scrolling forward: clear resume block so warp can fire
+        blockWarpRef.current = false
+      }
 
       setStep(prev => {
         const next = prev + dir
         if (next < 0) return 0
-        if (next > WARP_STEP) return prev  // don't go past warp
+        if (next > WARP_STEP) return prev
+        if (next === WARP_STEP && !blockWarpRef.current) {
+          setIsWarp(true)
+        }
         return next
       })
     }
 
     const onWheel = (e) => {
+      // Always preventDefault to stop browser scroll accumulation during intro
       e.preventDefault()
       wheelAccum += e.deltaY
       if (Math.abs(wheelAccum) >= THRESH) {
@@ -347,7 +347,6 @@ export default function Hero1({ onComplete, resumeFromEnd = false }) {
       }
     }
 
-    // Touch support
     let touchStartY = 0
     const onTouchStart = e => { touchStartY = e.touches[0].clientY }
     const onTouchEnd   = e => {
@@ -355,7 +354,6 @@ export default function Hero1({ onComplete, resumeFromEnd = false }) {
       if (Math.abs(dy) > 40) advance(dy > 0 ? 1 : -1)
     }
 
-    // Keyboard arrows
     const onKey = e => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowRight') advance(1)
       if (e.key === 'ArrowUp'   || e.key === 'ArrowLeft')  advance(-1)
@@ -371,29 +369,21 @@ export default function Hero1({ onComplete, resumeFromEnd = false }) {
       window.removeEventListener('touchend', onTouchEnd)
       window.removeEventListener('keydown', onKey)
     }
-  }, [introGone])
+  // Re-register when introGone or active changes
+  }, [introGone, active])
 
-  // Float offsets — each chapter bobs independently
+  // Float offsets
   const floatA = useFloat(8,  4200)
   const floatB = useFloat(10, 5100)
   const floatC = useFloat(7,  3700)
   const floatD = useFloat(9,  4800)
   const floatE = useFloat(6,  3200)
 
-  // Warp: when step reaches WARP_STEP, opacity fades to 0 over 1.4s.
-  // onComplete is called via onTransitionEnd on the stage div (below) —
-  // fires exactly when the fade finishes, not on a guessed timeout.
-  // isResumed blocks warp until the user scrolls forward again.
-  const isWarp = step >= WARP_STEP && !isResumed
-
   return (
     <>
-      {/* Skip intro animation when returning from Hero2 */}
-      {!isResumed && !introGone && <IntroOverlay onDone={onIntroDone} />}
+      {/* Skip intro when returning from Hero2 */}
+      {!resumeFromEnd && !introGone && <IntroOverlay onDone={onIntroDone} />}
 
-      {/* Full-screen fixed stage — sits above Hero2 (zIndex 2 > 1).
-          onTransitionEnd fires once the 1.4s opacity fade completes,
-          which is the exact right moment to hand control to Hero2. */}
       <div
         onTransitionEnd={isWarp ? (e) => { if (e.propertyName === 'opacity') onComplete?.() } : undefined}
         style={{
@@ -450,7 +440,6 @@ export default function Hero1({ onComplete, resumeFromEnd = false }) {
                     fontSize:'clamp(38px,6.5vw,96px)',
                     fontWeight:w, color,
                     letterSpacing:'-0.03em', lineHeight:1.1,
-                    // stagger via animation-delay
                     opacity: step === 2 ? 1 : 0,
                     transform: step === 2 ? 'translateX(0)' : `translateX(${i%2===0?-30:30}px)`,
                     transition: `opacity 0.9s ${i*0.1}s cubic-bezier(0.16,1,0.3,1), transform 0.9s ${i*0.1}s cubic-bezier(0.16,1,0.3,1)`,

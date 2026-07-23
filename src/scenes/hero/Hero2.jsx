@@ -1,35 +1,16 @@
 /**
  * Hero2.jsx — Four Particle Spheres · Discrete-Step Scroll
  * Moweb Studio
- *
- * CORE MECHANIC (matches Hero1 pattern):
- *   Each scroll = one discrete action:
- *   Step 0  → all 4 orbs visible (overview)
- *   Step 1  → zoom INTO orb 0 (open)
- *   Step 2  → zoom OUT of orb 0, back to overview
- *   Step 3  → zoom INTO orb 1 (open)
- *   Step 4  → zoom OUT of orb 1
- *   Step 5  → zoom INTO orb 2
- *   Step 6  → zoom OUT of orb 2
- *   Step 7  → zoom INTO orb 3 (final, shows CTA)
- *   Step 8  → fade out (end of hero2)
- *
- *  The canvas animates the zoom using a lerped "animProgress" per step,
- *  so each step is a smooth cinematic move rather than a jump.
- *
- *  Floating: text bobs gently via a sine-wave RAF loop.
  */
 
 import { useEffect, useRef, useState } from 'react'
 
-/* ─── Math ─────────────────────────────────────────────────────── */
 const clamp = (v, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v))
 const lerp   = (a, b, t) => a + (b - a) * t
 const eout   = t => 1 - Math.pow(1 - t, 3)
 const eio    = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2
 const sq     = t => t * t
 
-/* ─── Content ──────────────────────────────────────────────────── */
 const POINTS = [
   { label:'Motion First',    sub:'Every element moves with intention',  rgb:[168,196,255], rs:0.110 },
   { label:'Built Different', sub:'Not pages — cinematic experiences',   rgb:[255,212,168], rs:0.082 },
@@ -37,28 +18,18 @@ const POINTS = [
   { label:'Zero Compromise', sub:'Precision in every frame rendered',   rgb:[232,192,255], rs:0.094 },
 ]
 
-// Step map: which orb is active and what are we doing
-// step 0 = overview
-// odd  steps = zoomed IN  to orb (step-1)/2
-// even steps = overview / zoomed OUT
-const TOTAL_STEPS = 8  // 0–8
+const TOTAL_STEPS = 8
 const ORB_LOCS    = [[0.27,0.355],[0.73,0.355],[0.27,0.645],[0.73,0.645]]
 const ROT_OFFSETS = [0, 1.15, 2.32, 3.74]
 
-function getOrbState(step, animT) {
-  // Returns { activeOrb: -1|0-3, zoomT: 0-1, isInside: bool }
-  if (step === 0) return { activeOrb: -1, zoomT: 0, isInside: false }
-
-  const orbIndex  = Math.floor((step - 1) / 2)    // which orb (0-3)
-  const isZoomIn  = (step % 2) === 1              // odd = zooming in
-  const isZoomOut = (step % 2) === 0 && step > 0  // even (>0) = zooming out
-
-  if (isZoomIn)  return { activeOrb: orbIndex, zoomT: eio(animT), isInside: animT >= 1, phase: 'in' }
-  if (isZoomOut) return { activeOrb: orbIndex - 1, zoomT: 1 - eio(animT), isInside: false, phase: 'out' }
-  return { activeOrb: -1, zoomT: 0, isInside: false }
+function getOrbState(step, rawT) {
+  if (step === 0) return { activeOrb: -1, zoomT: 0 }
+  const orbIndex = Math.floor((step - 1) / 2)
+  const isZoomIn = (step % 2) === 1
+  if (isZoomIn)  return { activeOrb: orbIndex,     zoomT: eio(rawT) }
+  return               { activeOrb: orbIndex - 1,  zoomT: 1 - eio(rawT) }
 }
 
-/* ─── Geometry ─────────────────────────────────────────────────── */
 function fibSphere(n) {
   const phi = Math.PI * (1 + Math.sqrt(5))
   return Array.from({ length: n }, (_, i) => {
@@ -70,7 +41,6 @@ function fibSphere(n) {
 }
 
 const SPHERE_SETS = [fibSphere(340), fibSphere(210), fibSphere(290), fibSphere(460)]
-
 const RING_CONFIGS = [
   [[130,  0, 1.48]],
   [[120, 22, 1.42], [75, -20, 1.74]],
@@ -88,7 +58,7 @@ const RING_DATA = RING_CONFIGS.map(configs =>
     return { pts, rf }
   })
 )
-const Y_SCALE  = [1.0, 1.0, 0.70, 1.0]
+const Y_SCALE = [1.0, 1.0, 0.70, 1.0]
 
 const BG_DOTS = Array.from({ length: 260 }, () => ({
   x: Math.random(), y: Math.random(),
@@ -98,7 +68,6 @@ const BG_DOTS = Array.from({ length: 260 }, () => ({
   ph: Math.random() * Math.PI * 2,
 }))
 
-/* ─── Float hook ────────────────────────────────────────────────── */
 function useFloat(amplitude = 10, period = 4000) {
   const [y, setY] = useState(0)
   useEffect(() => {
@@ -110,36 +79,135 @@ function useFloat(amplitude = 10, period = 4000) {
   return y
 }
 
+/* ─── Step dots ─────────────────────────────────────────────────── */
+function StepDots({ step }) {
+  return (
+    <div style={{
+      position:'absolute', right:20, top:'50%', transform:'translateY(-50%)',
+      display:'flex', flexDirection:'column', gap:10, zIndex:20, pointerEvents:'none',
+    }}>
+      {POINTS.map((pt, i) => {
+        const orbStep = i * 2 + 1
+        const isActive = step === orbStep || step === orbStep + 1
+        const isPast   = step > orbStep + 1
+        const [r, g, b] = pt.rgb
+        return (
+          <div key={i} style={{
+            width:  isActive ? 2 : 1,
+            height: isActive ? 24 : 8,
+            background: isActive ? `rgb(${r},${g},${b})` : isPast ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)',
+            borderRadius:1,
+            transition:'all 0.5s cubic-bezier(0.16,1,0.3,1)',
+            boxShadow: isActive ? `0 0 8px rgba(${r},${g},${b},0.75)` : 'none',
+          }} />
+        )
+      })}
+    </div>
+  )
+}
+
+/* ─── Overview labels ────────────────────────────────────────────── */
+function OverviewLabels({ step, animTRef, frameRef }) {
+  // Drive alpha purely from animTRef so there's zero React-state lag
+  const elRef = useRef(null)
+  useEffect(() => {
+    let raf
+    const tick = () => {
+      if (elRef.current) {
+        const rawT = animTRef.current
+        let alpha = 0
+        if (step === 0) alpha = eout(rawT)
+        else if (step > 0 && (step % 2) === 0) alpha = eout(rawT)
+        elRef.current.style.opacity = alpha
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [step, animTRef])
+
+  return (
+    <div ref={elRef} style={{ opacity:0 }}>
+      {ORB_LOCS.map(([lx, ly], i) => {
+        const [r, g, b] = POINTS[i].rgb
+        return (
+          <div key={i} style={{
+            position:'absolute',
+            left:`${lx * 100}%`, top:`${ly * 100 + 13}%`,
+            transform:'translateX(-50%)',
+            textAlign:'center', pointerEvents:'none', zIndex:5,
+          }}>
+            <div style={{ fontSize:'clamp(8px,1.7vmin,11px)', fontWeight:600, letterSpacing:'0.06em', color:`rgba(${r},${g},${b},0.82)` }}>{POINTS[i].label}</div>
+            <div style={{ fontSize:'clamp(6px,1.2vmin,9px)', color:`rgba(${r},${g},${b},0.32)`, marginTop:4, letterSpacing:'0.04em' }}>{POINTS[i].sub}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /* ─── Text overlay ──────────────────────────────────────────────── */
-function TextOverlay({ step, animT, floatY, animReady }) {
-  const orbIndex  = Math.floor((step - 1) / 2)
+function TextOverlay({ step, animTRef, floatY }) {
+  const wrapRef  = useRef(null)
+  const floatRef = useRef(floatY)
+  floatRef.current = floatY
+
   const isZoomIn  = step > 0 && (step % 2) === 1
   const isZoomOut = step > 0 && (step % 2) === 0 && step <= TOTAL_STEPS
+  const orbIndex  = Math.floor((step - 1) / 2)
+  const pt        = (step > 0 && step <= TOTAL_STEPS) ? POINTS[Math.min(orbIndex, 3)] : null
 
-  // Which orb to show label for (valid for both zoom-in AND zoom-out steps)
-  const showOrb = step > 0 && step <= TOTAL_STEPS
-  const pt      = showOrb ? POINTS[Math.min(orbIndex, 3)] : null
+  // Drive opacity directly from animTRef in a RAF — no React state involved.
+  // This eliminates the 1-frame flash entirely because the ref always reflects
+  // the true current animation progress, reset synchronously on step change.
+  useEffect(() => {
+    if (!pt) return
+    let raf
+    const tick = () => {
+      const el = wrapRef.current
+      if (el) {
+        const rawT = animTRef.current
+        let alpha = 0
+        if (isZoomIn) {
+          // Only show text deep into the zoom so globe is clearly open first.
+          // rawT > 0.78 means the orb has expanded to ~93% of its final size.
+          alpha = rawT > 0.78 ? clamp((rawT - 0.78) / 0.22) : 0
+        } else if (isZoomOut) {
+          alpha = clamp(1 - rawT / 0.30)
+        }
+        el.style.opacity = alpha
+        const slideY = isZoomIn ? lerp(20, 0, eout(clamp((rawT - 0.78) / 0.22))) : 0
+        el.style.transform = `translateY(${floatRef.current + slideY}px)`
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [step, pt, isZoomIn, isZoomOut, animTRef])
 
-  // Text alpha:
-  //  • zoom-in  → fade IN  from animT 0.72 → 1.0
-  //  • zoom-out → fade OUT from animT 0.00 → 0.30  (keeps element alive so CSS doesn't snap)
-  let textAlpha = 0
-  if (isZoomIn) {
-    textAlpha = animT > 0.72 ? clamp((animT - 0.72) / 0.28) : 0
-  } else if (isZoomOut) {
-    textAlpha = clamp(1 - animT / 0.30)   // 1 → 0 over first 30 % of zoom-out
-  }
-
-  // Don't render until animT has genuinely started from 0 on this step.
-  // This prevents a 1-frame flash where the previous step's animT=1 leaks through.
-  if (!animReady && isZoomIn) return null
-  if (!pt || textAlpha < 0.005) return null
+  if (!pt) return null
 
   const [r, g, b] = pt.rgb
   const color     = `rgb(${r},${g},${b})`
   const colorDim  = `rgba(${r},${g},${b},0.48)`
   const glowBox   = `0 0 20px 6px rgba(${r},${g},${b},0.5)`
   const isFinal   = orbIndex === 3
+
+  // CTA fades in separately — also driven by animTRef via inline RAF
+  const ctaRef = useRef(null)
+  useEffect(() => {
+    if (!isFinal || !isZoomIn) return
+    let raf
+    const tick = () => {
+      if (ctaRef.current) {
+        const rawT = animTRef.current
+        ctaRef.current.style.opacity = rawT > 0.88 ? clamp((rawT - 0.88) / 0.12) : 0
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [isFinal, isZoomIn, animTRef])
 
   return (
     <>
@@ -149,15 +217,13 @@ function TextOverlay({ step, animT, floatY, animReady }) {
         .h2-btn-g { padding:12px 32px; border:none; background:none; color:${colorDim}; font-size:9px; letter-spacing:0.22em; text-transform:uppercase; cursor:pointer; font-family:inherit; transition:color 0.22s; }
         .h2-btn-g:hover { color:${color}; }
       `}</style>
-      <div style={{
+      <div ref={wrapRef} style={{
         position:'absolute', inset:0, zIndex:10,
         display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
         pointerEvents:'none',
-        opacity: textAlpha,
-        transform: `translateY(${floatY + (isZoomIn ? lerp(24, 0, eout(textAlpha)) : 0)}px)`,
+        opacity: 0,  // RAF drives this
         willChange:'transform, opacity',
       }}>
-        {/* Counter */}
         <div style={{
           position:'absolute', top:'13%', left:'50%', transform:'translateX(-50%)',
           fontSize:9, letterSpacing:'0.44em', textTransform:'uppercase', color,
@@ -177,12 +243,10 @@ function TextOverlay({ step, animT, floatY, animReady }) {
             letterSpacing:'0.07em', margin:0, fontWeight:300,
           }}>{pt.sub}</p>
 
-          {isFinal && animT > 0.82 && (
-            <div style={{
+          {isFinal && (
+            <div ref={ctaRef} style={{
               marginTop:36, display:'flex', gap:14, justifyContent:'center',
-              pointerEvents:'auto',
-              opacity: clamp((animT - 0.82) / 0.18),
-              transition:'opacity 0.5s',
+              pointerEvents:'auto', opacity:0,
             }}>
               <button className="h2-btn-p">Start a Project</button>
               <button className="h2-btn-g">View Work ↗</button>
@@ -194,84 +258,38 @@ function TextOverlay({ step, animT, floatY, animReady }) {
   )
 }
 
-/* ─── Overview labels (step 0) ──────────────────────────────────── */
-function OverviewLabels({ step, animT, animReady }) {
-  const alpha = step === 0 ? eout(animT) : step > 0 && (step % 2) === 0 ? eout(animT) : 0
-  if (!animReady || alpha < 0.005) return null
-  return (
-    <>
-      {ORB_LOCS.map(([lx, ly], i) => {
-        const [r, g, b] = POINTS[i].rgb
-        return (
-          <div key={i} style={{
-            position:'absolute',
-            left:`${lx * 100}%`, top:`${ly * 100 + 13}%`,
-            transform:'translateX(-50%)',
-            textAlign:'center', pointerEvents:'none', zIndex:5, opacity:alpha,
-          }}>
-            <div style={{ fontSize:'clamp(8px,1.7vmin,11px)', fontWeight:600, letterSpacing:'0.06em', color:`rgba(${r},${g},${b},0.82)` }}>{POINTS[i].label}</div>
-            <div style={{ fontSize:'clamp(6px,1.2vmin,9px)', color:`rgba(${r},${g},${b},0.32)`, marginTop:4, letterSpacing:'0.04em' }}>{POINTS[i].sub}</div>
-          </div>
-        )
-      })}
-    </>
-  )
-}
-
-/* ─── Step dots ─────────────────────────────────────────────────── */
-function StepDots({ step }) {
-  // 4 orbs, 2 steps each = 8 steps total. Show as 4 pairs.
-  return (
-    <div style={{
-      position:'absolute', right:20, top:'50%', transform:'translateY(-50%)',
-      display:'flex', flexDirection:'column', gap:10, zIndex:20, pointerEvents:'none',
-    }}>
-      {POINTS.map((pt, i) => {
-        const orbStep = i * 2 + 1  // step where this orb zooms in
-        const isActive = step === orbStep || step === orbStep + 1
-        const isPast   = step > orbStep + 1
-        const [r, g, b] = pt.rgb
-        return (
-          <div key={i} style={{
-            width:  isActive ? 2 : 1,
-            height: isActive ? 24 : 8,
-            background: isActive ? `rgb(${r},${g},${b})` : isPast ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)',
-            borderRadius:1,
-            transition:'all 0.5s cubic-bezier(0.16,1,0.3,1)',
-            boxShadow: isActive ? `0 0 8px rgba(${r},${g},${b},0.75)` : 'none',
-          }} />
-        )
-      })}
-    </div>
-  )
-}
-
 /* ─── MAIN ──────────────────────────────────────────────────────── */
 export default function Hero2({ active = false, onExit }) {
   const canvasRef  = useRef(null)
   const [step, setStep] = useState(0)
-  const stepRef    = useRef(0)   // for canvas RAF
-  const animTRef   = useRef(0)   // 0→1 smooth lerp between steps
-  const [animT, setAnimT] = useState(0)  // mirrored for React renders
-  const [animReady, setAnimReady] = useState(false)  // true once animT is safely > 0 after step change
+  const stepRef    = useRef(0)
+  // animTRef is the single source of truth for animation progress.
+  // It is reset to 0 synchronously when step changes (in the useEffect below).
+  // TextOverlay and OverviewLabels read it directly via their own RAF loops —
+  // no React state means no render-cycle lag and no flash frames.
+  const animTRef   = useRef(0)
   const lockedRef  = useRef(false)
-  // Tracks whether animT has been "warmed up" after a step change.
-  // Prevents stale animT from leaking into the new step's text overlay.
-  const animReadyRef = useRef(false)
 
   const floatY = useFloat(9, 4600)
 
-  // Sync stepRef — also mark animT as "not ready" so text doesn't flash on step change
+  // Sync stepRef and reset animTRef synchronously on step change
   useEffect(() => {
     stepRef.current  = step
     animTRef.current = 0
-    animReadyRef.current = false
-    setAnimReady(false)
   }, [step])
 
-  /* ── Discrete scroll handler — only active after Hero1 hands off ── */
+  // Reset step to 0 when Hero2 becomes inactive (returning from Hero2)
   useEffect(() => {
-    if (!active) return   // stay dormant while Hero1 is running
+    if (!active) {
+      setStep(0)
+      stepRef.current  = 0
+      animTRef.current = 0
+    }
+  }, [active])
+
+  /* ── Scroll handler ── */
+  useEffect(() => {
+    if (!active) return
 
     let wheelAccum = 0
     const THRESH   = 60
@@ -279,7 +297,6 @@ export default function Hero2({ active = false, onExit }) {
     const advance = (dir) => {
       if (lockedRef.current) return
 
-      // Scroll back at step 0 → hand control back to Hero1
       if (dir < 0 && stepRef.current === 0) {
         onExit?.()
         return
@@ -288,10 +305,7 @@ export default function Hero2({ active = false, onExit }) {
       lockedRef.current = true
       setTimeout(() => { lockedRef.current = false }, 900)
 
-      setStep(prev => {
-        const next = clamp(prev + dir, 0, TOTAL_STEPS)
-        return next
-      })
+      setStep(prev => clamp(prev + dir, 0, TOTAL_STEPS))
     }
 
     const onWheel = (e) => {
@@ -325,7 +339,7 @@ export default function Hero2({ active = false, onExit }) {
       window.removeEventListener('touchend', onTouchEnd)
       window.removeEventListener('keydown', onKey)
     }
-  }, [active])
+  }, [active, onExit])
 
   /* ── Canvas RAF ── */
   useEffect(() => {
@@ -343,31 +357,21 @@ export default function Hero2({ active = false, onExit }) {
     resize()
     window.addEventListener('resize', resize)
 
-    const ANIM_SPEED = 0.018  // how fast animT lerps to 1 (lower = slower/cinematic)
+    const ANIM_SPEED = 0.018
 
     const draw = (ts) => {
       const t  = ts * 0.001
       const st = stepRef.current
 
-      // Smoothly drive animT toward 1
       animTRef.current = Math.min(1, animTRef.current + ANIM_SPEED)
-      const aT = eio(animTRef.current)
-      setAnimT(aT)  // sync to React
+      const rawT = animTRef.current
 
-      // Mark ready once raw animT has advanced past a safe threshold.
-      // This prevents text from rendering with a leftover animT=1 from the previous step.
-      if (!animReadyRef.current && animTRef.current > 0.04) {
-        animReadyRef.current = true
-        setAnimReady(true)
-      }
-
-      const { activeOrb, zoomT, phase } = getOrbState(st, animTRef.current)
+      const { activeOrb, zoomT } = getOrbState(st, rawT)
 
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
       ctx.fillStyle = '#020409'
       ctx.fillRect(0, 0, W, H)
 
-      // Background dots
       for (const d of BG_DOTS) {
         d.x = (d.x + d.vx + 1) % 1
         d.y = (d.y + d.vy + 1) % 1
@@ -395,17 +399,15 @@ export default function Hero2({ active = false, onExit }) {
         let alpha  = 1.0
 
         if (isActive) {
-          const zt = zoomT
-          cx     = lerp(cx, W * 0.5, zt)
-          cy     = lerp(cy, H * 0.5, zt)
-          radius = lerp(baseR, maxR, Math.pow(zt, 1.75))
-          alpha  = zt > 0.5 ? lerp(1, 0.12, (zt - 0.5) / 0.5) : 1
+          cx     = lerp(cx, W * 0.5, zoomT)
+          cy     = lerp(cy, H * 0.5, zoomT)
+          radius = lerp(baseR, maxR, Math.pow(zoomT, 1.75))
+          alpha  = zoomT > 0.5 ? lerp(1, 0.12, (zoomT - 0.5) / 0.5) : 1
         } else if (isFar) {
           const ft = clamp(zoomT * 1.9)
           alpha    = lerp(1, 0, ft)
           radius   = lerp(baseR, baseR * 0.52, ft)
         } else {
-          // overview — orbs gently pulse
           radius = baseR * (1 + 0.04 * Math.sin(t * 0.6 + i))
         }
 
@@ -448,7 +450,6 @@ export default function Hero2({ active = false, onExit }) {
         }
       }
 
-      // Ambient glow when inside an orb
       if (activeOrb >= 0 && zoomT > 0.4) {
         const [r, g, b] = POINTS[activeOrb].rgb
         const ga = sq(clamp((zoomT - 0.4) / 0.6)) * 0.14
@@ -462,9 +463,8 @@ export default function Hero2({ active = false, onExit }) {
         }
       }
 
-      // Fade out on final step
       if (st >= TOTAL_STEPS) {
-        ctx.fillStyle = `rgba(2,4,9,${clamp(animTRef.current)})`
+        ctx.fillStyle = `rgba(2,4,9,${clamp(rawT)})`
         ctx.fillRect(0, 0, W, H)
       }
 
@@ -474,12 +474,10 @@ export default function Hero2({ active = false, onExit }) {
     return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize) }
   }, [])
 
-  const isZoomIn = step > 0 && (step % 2) === 1
   const scrollHintOp = step === 0 ? 1 : 0
 
   return (
     <>
-      {/* Fixed full-screen stage */}
       <div style={{
         position:'fixed', inset:0, zIndex:1,
         opacity: step >= TOTAL_STEPS ? 0 : 1,
@@ -488,11 +486,10 @@ export default function Hero2({ active = false, onExit }) {
       }}>
         <canvas ref={canvasRef} style={{ position:'absolute', inset:0, zIndex:0 }} />
 
-        <OverviewLabels step={step} animT={animT} animReady={animReady} />
-        <TextOverlay    step={step} animT={animT} floatY={floatY} animReady={animReady} />
+        <OverviewLabels step={step} animTRef={animTRef} />
+        <TextOverlay    step={step} animTRef={animTRef} floatY={floatY} />
         <StepDots       step={step} />
 
-        {/* Scroll hint */}
         <div style={{
           position:'absolute', bottom:26, left:'50%',
           transform:'translateX(-50%)',
@@ -509,7 +506,6 @@ export default function Hero2({ active = false, onExit }) {
         </div>
       </div>
 
-      {/* Spacer */}
       <div style={{ height:'100vh' }} />
 
       <style>{`

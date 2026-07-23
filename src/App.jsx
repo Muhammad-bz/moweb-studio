@@ -20,16 +20,15 @@ function App() {
       color: '#fff',
       overflowX: 'clip',
     }}>
-      {/* Single shared nav — fixed, above everything */}
       <Navbar />
 
-      {/* Story hero — sits on top (zIndex 2) until warp-exit completes */}
+      {/* active=!hero1Done so Hero1 stops intercepting wheel when Hero2 is live */}
       <Hero1
         onComplete={() => setHero1Done(true)}
         resumeFromEnd={hero1Done}
+        active={!hero1Done}
       />
 
-      {/* Sphere hero — only activates after Hero1 signals done */}
       <Hero2
         active={hero1Done}
         onExit={() => setHero1Done(false)}
