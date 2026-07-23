@@ -24,10 +24,16 @@ function App() {
       <Navbar />
 
       {/* Story hero — sits on top (zIndex 2) until warp-exit completes */}
-      <Hero1 onComplete={() => setHero1Done(true)} />
+      <Hero1
+        onComplete={() => setHero1Done(true)}
+        resumeFromEnd={hero1Done}
+      />
 
       {/* Sphere hero — only activates after Hero1 signals done */}
-      <Hero2 active={hero1Done} />
+      <Hero2
+        active={hero1Done}
+        onExit={() => setHero1Done(false)}
+      />
     </main>
   )
 }

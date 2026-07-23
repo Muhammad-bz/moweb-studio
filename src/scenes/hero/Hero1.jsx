@@ -289,15 +289,30 @@ function GeometryGrid({ visible }) {
 }
 
 /* ─── MAIN ──────────────────────────────────────────────────────── */
-export default function Hero1({ onComplete }) {
+export default function Hero1({ onComplete, resumeFromEnd = false }) {
   const [step, setStep]           = useState(0)
   const [introGone, setIntroGone] = useState(false)
   const stepRef                   = useRef(0)
   const lockedRef                 = useRef(false)   // debounce between steps
+  // Internal flag: true while we're in "resumed from Hero2" mode.
+  // Cleared as soon as the user scrolls forward again (re-triggering warp).
+  const [isResumed, setIsResumed] = useState(false)
   const onIntroDone = useCallback(() => setIntroGone(true), [])
 
   // Sync stepRef for canvas
   useEffect(() => { stepRef.current = step }, [step])
+
+  // When resumeFromEnd flips true (Hero2 called onExit), snap Hero1 back to
+  // its final content step (5) so the user can scroll backwards naturally.
+  useEffect(() => {
+    if (resumeFromEnd) {
+      const resumeStep = WARP_STEP - 1
+      setStep(resumeStep)
+      stepRef.current = resumeStep
+      setIntroGone(true)
+      setIsResumed(true)
+    }
+  }, [resumeFromEnd])
 
   /* ── Discrete scroll / wheel / key handler ── */
   useEffect(() => {
@@ -310,6 +325,10 @@ export default function Hero1({ onComplete }) {
       if (lockedRef.current) return
       lockedRef.current = true
       setTimeout(() => { lockedRef.current = false }, 700) // debounce 700ms
+
+      // Scrolling forward while resumed clears the resume guard so warp
+      // can fire again normally on the next step change.
+      if (dir > 0) setIsResumed(false)
 
       setStep(prev => {
         const next = prev + dir
@@ -364,11 +383,13 @@ export default function Hero1({ onComplete }) {
   // Warp: when step reaches WARP_STEP, opacity fades to 0 over 1.4s.
   // onComplete is called via onTransitionEnd on the stage div (below) —
   // fires exactly when the fade finishes, not on a guessed timeout.
-  const isWarp = step >= WARP_STEP
+  // isResumed blocks warp until the user scrolls forward again.
+  const isWarp = step >= WARP_STEP && !isResumed
 
   return (
     <>
-      <IntroOverlay onDone={onIntroDone} />
+      {/* Skip intro animation when returning from Hero2 */}
+      {!isResumed && !introGone && <IntroOverlay onDone={onIntroDone} />}
 
       {/* Full-screen fixed stage — sits above Hero2 (zIndex 2 > 1).
           onTransitionEnd fires once the 1.4s opacity fade completes,

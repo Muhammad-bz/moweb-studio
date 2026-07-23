@@ -111,7 +111,7 @@ function useFloat(amplitude = 10, period = 4000) {
 }
 
 /* ─── Text overlay ──────────────────────────────────────────────── */
-function TextOverlay({ step, animT, floatY }) {
+function TextOverlay({ step, animT, floatY, animReady }) {
   const orbIndex  = Math.floor((step - 1) / 2)
   const isZoomIn  = step > 0 && (step % 2) === 1
   const isZoomOut = step > 0 && (step % 2) === 0 && step <= TOTAL_STEPS
@@ -130,6 +130,9 @@ function TextOverlay({ step, animT, floatY }) {
     textAlpha = clamp(1 - animT / 0.30)   // 1 → 0 over first 30 % of zoom-out
   }
 
+  // Don't render until animT has genuinely started from 0 on this step.
+  // This prevents a 1-frame flash where the previous step's animT=1 leaks through.
+  if (!animReady && isZoomIn) return null
   if (!pt || textAlpha < 0.005) return null
 
   const [r, g, b] = pt.rgb
@@ -192,9 +195,9 @@ function TextOverlay({ step, animT, floatY }) {
 }
 
 /* ─── Overview labels (step 0) ──────────────────────────────────── */
-function OverviewLabels({ step, animT }) {
+function OverviewLabels({ step, animT, animReady }) {
   const alpha = step === 0 ? eout(animT) : step > 0 && (step % 2) === 0 ? eout(animT) : 0
-  if (alpha < 0.005) return null
+  if (!animReady || alpha < 0.005) return null
   return (
     <>
       {ORB_LOCS.map(([lx, ly], i) => {
@@ -244,18 +247,27 @@ function StepDots({ step }) {
 }
 
 /* ─── MAIN ──────────────────────────────────────────────────────── */
-export default function Hero2({ active = false }) {
+export default function Hero2({ active = false, onExit }) {
   const canvasRef  = useRef(null)
   const [step, setStep] = useState(0)
   const stepRef    = useRef(0)   // for canvas RAF
   const animTRef   = useRef(0)   // 0→1 smooth lerp between steps
   const [animT, setAnimT] = useState(0)  // mirrored for React renders
+  const [animReady, setAnimReady] = useState(false)  // true once animT is safely > 0 after step change
   const lockedRef  = useRef(false)
+  // Tracks whether animT has been "warmed up" after a step change.
+  // Prevents stale animT from leaking into the new step's text overlay.
+  const animReadyRef = useRef(false)
 
   const floatY = useFloat(9, 4600)
 
-  // Sync stepRef
-  useEffect(() => { stepRef.current = step; animTRef.current = 0 }, [step])
+  // Sync stepRef — also mark animT as "not ready" so text doesn't flash on step change
+  useEffect(() => {
+    stepRef.current  = step
+    animTRef.current = 0
+    animReadyRef.current = false
+    setAnimReady(false)
+  }, [step])
 
   /* ── Discrete scroll handler — only active after Hero1 hands off ── */
   useEffect(() => {
@@ -266,6 +278,13 @@ export default function Hero2({ active = false }) {
 
     const advance = (dir) => {
       if (lockedRef.current) return
+
+      // Scroll back at step 0 → hand control back to Hero1
+      if (dir < 0 && stepRef.current === 0) {
+        onExit?.()
+        return
+      }
+
       lockedRef.current = true
       setTimeout(() => { lockedRef.current = false }, 900)
 
@@ -334,6 +353,13 @@ export default function Hero2({ active = false }) {
       animTRef.current = Math.min(1, animTRef.current + ANIM_SPEED)
       const aT = eio(animTRef.current)
       setAnimT(aT)  // sync to React
+
+      // Mark ready once raw animT has advanced past a safe threshold.
+      // This prevents text from rendering with a leftover animT=1 from the previous step.
+      if (!animReadyRef.current && animTRef.current > 0.04) {
+        animReadyRef.current = true
+        setAnimReady(true)
+      }
 
       const { activeOrb, zoomT, phase } = getOrbState(st, animTRef.current)
 
@@ -462,8 +488,8 @@ export default function Hero2({ active = false }) {
       }}>
         <canvas ref={canvasRef} style={{ position:'absolute', inset:0, zIndex:0 }} />
 
-        <OverviewLabels step={step} animT={animT} />
-        <TextOverlay    step={step} animT={animT} floatY={floatY} />
+        <OverviewLabels step={step} animT={animT} animReady={animReady} />
+        <TextOverlay    step={step} animT={animT} floatY={floatY} animReady={animReady} />
         <StepDots       step={step} />
 
         {/* Scroll hint */}
