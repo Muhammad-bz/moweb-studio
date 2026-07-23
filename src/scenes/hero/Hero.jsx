@@ -30,7 +30,7 @@ const sq    = t => t * t
 /* ─── Step constants ────────────────────────────────────────────── */
 const WARP_STEP    = 6   // the crossfade step
 const SPHERE_START = 7   // first sphere step
-const TOTAL_STEPS  = 15  // 0..15, 15 = end
+const TOTAL_STEPS  = 14  // 0..14, 14 = last orb zoom-in (no zoom-out past this)
 
 /* ─── Hero1 dot-field data ──────────────────────────────────────── */
 const BG_DOTS_H1 = Array.from({ length: 620 }, () => ({
@@ -92,12 +92,18 @@ const BG_DOTS_H2 = Array.from({ length: 260 }, () => ({
 /* Given a sphere-phase step (relative to SPHERE_START) and rawT 0→1,
    return which orb is zooming and how far. */
 function getOrbState(sphereStep, rawT) {
-  // sphereStep 0 = overview, 1-8 = zoom pairs
+  // sphereStep 0 = overview
+  // odd  sphereStep (1,3,5,7) = zoom-in  for orb floor((sphereStep-1)/2)
+  // even sphereStep (2,4,6,8) = zoom-out for orb (sphereStep/2 - 1)
   if (sphereStep <= 0) return { activeOrb: -1, zoomT: 0 }
-  const orbIndex = Math.floor((sphereStep - 1) / 2)
   const isZoomIn = (sphereStep % 2) === 1
-  if (isZoomIn) return { activeOrb: orbIndex,    zoomT: eio(rawT) }
-  return              { activeOrb: orbIndex - 1, zoomT: 1 - eio(rawT) }
+  if (isZoomIn) {
+    const orbIndex = Math.floor((sphereStep - 1) / 2)
+    return { activeOrb: orbIndex, zoomT: eio(rawT) }
+  } else {
+    const orbIndex = sphereStep / 2 - 1   // zoom-out: same orb that zoomed in
+    return { activeOrb: orbIndex, zoomT: 1 - eio(rawT) }
+  }
 }
 
 /* ─── Float hook ────────────────────────────────────────────────── */
@@ -256,55 +262,74 @@ function OverviewLabels({ step, animTRef }) {
   )
 }
 
-/* ─── Sphere text overlay ───────────────────────────────────────── */
-function SphereTextOverlay({ step, animTRef, floatY }) {
-  const wrapRef  = useRef(null)
-  const floatRef = useRef(floatY)
-  floatRef.current = floatY
-  const ctaRef   = useRef(null)
+/* ─── Single orb text panel (one per orb, always mounted) ──────── */
+function OrbPanel({ orbIndex, step, animTRef, floatY }) {
+  const wrapRef      = useRef(null)
+  const ctaRef       = useRef(null)
+  const floatRef     = useRef(floatY)
+  floatRef.current   = floatY
+  const exitAlphaRef = useRef(0)
+  const prevStepRef  = useRef(step)
 
-  const sphereStep = step - SPHERE_START
-  const isZoomIn   = sphereStep > 0 && (sphereStep % 2) === 1
-  const isZoomOut  = sphereStep > 0 && (sphereStep % 2) === 0
-  const orbIndex   = Math.max(0, Math.floor((sphereStep - 1) / 2))
-  const pt         = (sphereStep > 0) ? POINTS[Math.min(orbIndex, 3)] : null
-  const isFinal    = orbIndex === 3
+  const pt      = POINTS[orbIndex]
+  const isFinal = orbIndex === 3
+
+  // zoom-in step for this orb: 1,3,5,7 (sphereStep relative to SPHERE_START)
+  const zoomInSphereStep  = orbIndex * 2 + 1
+  const zoomOutSphereStep = orbIndex * 2 + 2
 
   useEffect(() => {
-    if (!pt) return
+    const prevSphereStep = prevStepRef.current - SPHERE_START
+    const curSphereStep  = step - SPHERE_START
+    // Snapshot alpha when transitioning from this orb's zoom-in to its zoom-out
+    if (prevSphereStep === zoomInSphereStep && curSphereStep === zoomOutSphereStep) {
+      exitAlphaRef.current = wrapRef.current
+        ? parseFloat(wrapRef.current.style.opacity) || 0
+        : 0
+    }
+    prevStepRef.current = step
+  }, [step, zoomInSphereStep, zoomOutSphereStep])
+
+  useEffect(() => {
     let raf
     const tick = () => {
       const el = wrapRef.current
       if (el) {
+        const sphereStep = step - SPHERE_START
         const rawT = animTRef.current
         let alpha = 0
-        if (isZoomIn)       alpha = rawT > 0.78 ? clamp((rawT - 0.78) / 0.22) : 0
-        else if (isZoomOut) alpha = clamp(1 - rawT / 0.30)
+        let slideY = 0
+        if (sphereStep === zoomInSphereStep) {
+          alpha  = rawT > 0.78 ? clamp((rawT - 0.78) / 0.22) : 0
+          slideY = lerp(20, 0, eout(clamp((rawT - 0.78) / 0.22)))
+        } else if (sphereStep === zoomOutSphereStep) {
+          alpha = exitAlphaRef.current * clamp(1 - rawT / 0.30)
+        }
         el.style.opacity   = alpha
-        const slideY = isZoomIn ? lerp(20, 0, eout(clamp((rawT - 0.78) / 0.22))) : 0
         el.style.transform = `translateY(${floatRef.current + slideY}px)`
       }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [step, pt, isZoomIn, isZoomOut, animTRef])
+  }, [step, zoomInSphereStep, zoomOutSphereStep, animTRef])
 
   useEffect(() => {
-    if (!isFinal || !isZoomIn) return
     let raf
     const tick = () => {
       if (ctaRef.current) {
+        const sphereStep = step - SPHERE_START
         const rawT = animTRef.current
-        ctaRef.current.style.opacity = rawT > 0.88 ? clamp((rawT - 0.88) / 0.12) : 0
+        ctaRef.current.style.opacity =
+          (isFinal && sphereStep === zoomInSphereStep && rawT > 0.88)
+            ? clamp((rawT - 0.88) / 0.12)
+            : 0
       }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [isFinal, isZoomIn, animTRef])
-
-  if (!pt) return null
+  }, [step, isFinal, zoomInSphereStep, animTRef])
 
   const [r, g, b] = pt.rgb
   const color    = `rgb(${r},${g},${b})`
@@ -313,15 +338,17 @@ function SphereTextOverlay({ step, animTRef, floatY }) {
 
   return (
     <>
-      <style>{`
-        .hw-btn-p{padding:12px 32px;border:1px solid ${color};border-radius:2px;background:transparent;color:${color};font-size:9px;letter-spacing:0.22em;text-transform:uppercase;cursor:pointer;font-family:inherit;transition:background 0.22s,color 0.22s}
-        .hw-btn-p:hover{background:${color};color:#000}
-        .hw-btn-g{padding:12px 32px;border:none;background:none;color:${colorDim};font-size:9px;letter-spacing:0.22em;text-transform:uppercase;cursor:pointer;font-family:inherit;transition:color 0.22s}
-        .hw-btn-g:hover{color:${color}}
-      `}</style>
+      {isFinal && (
+        <style>{`
+          .hw-btn-p{padding:12px 32px;border:1px solid ${color};border-radius:2px;background:transparent;color:${color};font-size:9px;letter-spacing:0.22em;text-transform:uppercase;cursor:pointer;font-family:inherit;transition:background 0.22s,color 0.22s}
+          .hw-btn-p:hover{background:${color};color:#000}
+          .hw-btn-g{padding:12px 32px;border:none;background:none;color:${colorDim};font-size:9px;letter-spacing:0.22em;text-transform:uppercase;cursor:pointer;font-family:inherit;transition:color 0.22s}
+          .hw-btn-g:hover{color:${color}}
+        `}</style>
+      )}
       <div ref={wrapRef} style={{ position:'absolute', inset:0, zIndex:10, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', pointerEvents:'none', opacity:0, willChange:'transform,opacity' }}>
         <div style={{ position:'absolute', top:'13%', left:'50%', transform:'translateX(-50%)', fontSize:9, letterSpacing:'0.44em', textTransform:'uppercase', color, fontWeight:400, whiteSpace:'nowrap' }}>
-          {`0${Math.min(orbIndex+1,4)} / 04`}
+          {`0${orbIndex + 1} / 04`}
         </div>
         <div style={{ textAlign:'center' }}>
           <div style={{ width:5, height:5, borderRadius:'50%', background:color, margin:'0 auto 18px', boxShadow:glowBox }} />
@@ -335,6 +362,17 @@ function SphereTextOverlay({ step, animTRef, floatY }) {
           )}
         </div>
       </div>
+    </>
+  )
+}
+
+/* ─── Sphere text overlay — renders all 4 panels simultaneously ─── */
+function SphereTextOverlay({ step, animTRef, floatY }) {
+  return (
+    <>
+      {POINTS.map((_, i) => (
+        <OrbPanel key={i} orbIndex={i} step={step} animTRef={animTRef} floatY={floatY} />
+      ))}
     </>
   )
 }
@@ -380,8 +418,30 @@ export default function Hero() {
       if (!introGone) return
       if (lockedRef.current) return
       lockedRef.current = true
+
+      const cur = stepRef.current
+      const sphereStep = cur - SPHERE_START
+
+      // When scrolling forward from a zoom-in step (odd sphereStep 1,3,5),
+      // auto-play the zoom-out first, then advance to the next zoom-in.
+      // sphereStep 1 = orb0 zoom-in (step 8), 3 = orb1, 5 = orb2
+      const isOrbZoomIn = dir === 1 && sphereStep >= 1 && sphereStep % 2 === 1 && sphereStep <= 5
+
+      if (isOrbZoomIn) {
+        // Step to the zoom-out step first
+        setStep(cur + 1)
+        animTRef.current = 0
+        // After the zoom-out plays (~650ms), auto-advance to the next zoom-in
+        setTimeout(() => {
+          setStep(cur + 2)
+          animTRef.current = 0
+          setTimeout(() => { lockedRef.current = false }, 750)
+        }, 650)
+        return
+      }
+
       // Slightly longer lock during warp so it can play out
-      setTimeout(() => { lockedRef.current = false }, dir !== 0 && stepRef.current === WARP_STEP ? 1400 : 750)
+      setTimeout(() => { lockedRef.current = false }, dir !== 0 && cur === WARP_STEP ? 1400 : 750)
 
       setStep(prev => {
         const next = prev + dir
