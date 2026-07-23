@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Navbar from './scenes/hero/Navbar'
@@ -8,6 +8,8 @@ import Hero2  from './scenes/hero/Hero2'
 gsap.registerPlugin(ScrollTrigger)
 
 function App() {
+  const [hero1Done, setHero1Done] = useState(false)
+
   useEffect(() => {
     gsap.defaults({ ease: 'power3.out' })
   }, [])
@@ -21,11 +23,11 @@ function App() {
       {/* Single shared nav — fixed, above everything */}
       <Navbar />
 
-      {/* Story hero (1100vh) → warp exit → */}
-      <Hero1 />
+      {/* Story hero — sits on top (zIndex 2) until warp-exit completes */}
+      <Hero1 onComplete={() => setHero1Done(true)} />
 
-      {/* Sphere hero (1500vh) ← arrival burst ← */}
-      <Hero2 />
+      {/* Sphere hero — only activates after Hero1 signals done */}
+      <Hero2 active={hero1Done} />
     </main>
   )
 }

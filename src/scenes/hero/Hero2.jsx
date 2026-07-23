@@ -112,21 +112,25 @@ function useFloat(amplitude = 10, period = 4000) {
 
 /* ─── Text overlay ──────────────────────────────────────────────── */
 function TextOverlay({ step, animT, floatY }) {
-  const orbIndex = Math.floor((step - 1) / 2)
-  const isZoomIn = step > 0 && (step % 2) === 1
-  const isInside = isZoomIn && animT > 0.85
+  const orbIndex  = Math.floor((step - 1) / 2)
+  const isZoomIn  = step > 0 && (step % 2) === 1
+  const isZoomOut = step > 0 && (step % 2) === 0 && step <= TOTAL_STEPS
 
-  // Which orb to show label for
+  // Which orb to show label for (valid for both zoom-in AND zoom-out steps)
   const showOrb = step > 0 && step <= TOTAL_STEPS
   const pt      = showOrb ? POINTS[Math.min(orbIndex, 3)] : null
 
-  // Text visibility: appears when animT is past 0.75 on zoom-in, disappears on zoom-out start
+  // Text alpha:
+  //  • zoom-in  → fade IN  from animT 0.72 → 1.0
+  //  • zoom-out → fade OUT from animT 0.00 → 0.30  (keeps element alive so CSS doesn't snap)
   let textAlpha = 0
   if (isZoomIn) {
     textAlpha = animT > 0.72 ? clamp((animT - 0.72) / 0.28) : 0
+  } else if (isZoomOut) {
+    textAlpha = clamp(1 - animT / 0.30)   // 1 → 0 over first 30 % of zoom-out
   }
 
-  if (!pt || textAlpha < 0.01) return null
+  if (!pt || textAlpha < 0.005) return null
 
   const [r, g, b] = pt.rgb
   const color     = `rgb(${r},${g},${b})`
@@ -148,7 +152,6 @@ function TextOverlay({ step, animT, floatY }) {
         pointerEvents:'none',
         opacity: textAlpha,
         transform: `translateY(${floatY + (isZoomIn ? lerp(24, 0, eout(textAlpha)) : 0)}px)`,
-        transition: 'opacity 0.6s ease',
         willChange:'transform, opacity',
       }}>
         {/* Counter */}
@@ -241,7 +244,7 @@ function StepDots({ step }) {
 }
 
 /* ─── MAIN ──────────────────────────────────────────────────────── */
-export default function Hero2() {
+export default function Hero2({ active = false }) {
   const canvasRef  = useRef(null)
   const [step, setStep] = useState(0)
   const stepRef    = useRef(0)   // for canvas RAF
@@ -254,8 +257,10 @@ export default function Hero2() {
   // Sync stepRef
   useEffect(() => { stepRef.current = step; animTRef.current = 0 }, [step])
 
-  /* ── Discrete scroll handler ── */
+  /* ── Discrete scroll handler — only active after Hero1 hands off ── */
   useEffect(() => {
+    if (!active) return   // stay dormant while Hero1 is running
+
     let wheelAccum = 0
     const THRESH   = 60
 
@@ -301,7 +306,7 @@ export default function Hero2() {
       window.removeEventListener('touchend', onTouchEnd)
       window.removeEventListener('keydown', onKey)
     }
-  }, [])
+  }, [active])
 
   /* ── Canvas RAF ── */
   useEffect(() => {

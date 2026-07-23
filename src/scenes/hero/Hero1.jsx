@@ -192,10 +192,13 @@ function IntroOverlay({ onDone }) {
 }
 
 /* ─── Chapter slide component ───────────────────────────────────── */
-// visible = true → slide in from side + float
-// visible = false → fade + slide out to opposite side
+// TWO-DIV PATTERN — critical for correct animation:
+//   Outer div: applies floatY directly with NO CSS transition. Float updates
+//              every RAF frame; putting it on the same div as the step-change
+//              transition re-armed the delay every frame → text flew off-screen.
+//   Inner div: handles opacity + X slide with enter-delay so the outgoing
+//              chapter fades before the incoming one appears.
 function Chapter({ visible, fromLeft = true, floatY = 0, children }) {
-  const xIn  =  fromLeft ? -60 : 60
   const xOut = fromLeft ? 60 : -60
   return (
     <div style={{
@@ -203,17 +206,19 @@ function Chapter({ visible, fromLeft = true, floatY = 0, children }) {
       display:'flex', alignItems:'center', justifyContent:'center',
       pointerEvents:'none',
     }}>
-      <div style={{
-        opacity:    visible ? 1 : 0,
-        transform:  visible
-          ? `translateX(0px) translateY(${floatY}px)`
-          : `translateX(${xOut}px) translateY(${floatY}px)`,
-        transition: visible
-          ? 'opacity 0.9s cubic-bezier(0.16,1,0.3,1), transform 0.9s cubic-bezier(0.16,1,0.3,1)'
-          : 'opacity 0.55s ease-in, transform 0.55s ease-in',
-        willChange: 'transform, opacity',
-      }}>
-        {children}
+      {/* Float wrapper — raw direct value, zero CSS transition */}
+      <div style={{ transform: `translateY(${floatY}px)` }}>
+        {/* Step-change wrapper — transitions only opacity + X */}
+        <div style={{
+          opacity:   visible ? 1 : 0,
+          transform: visible ? 'translateX(0px)' : `translateX(${xOut}px)`,
+          transition: visible
+            ? 'opacity 0.9s 0.28s cubic-bezier(0.16,1,0.3,1), transform 0.9s 0.28s cubic-bezier(0.16,1,0.3,1)'
+            : 'opacity 0.38s ease-in, transform 0.38s ease-in',
+          willChange: 'transform, opacity',
+        }}>
+          {children}
+        </div>
       </div>
     </div>
   )
@@ -284,7 +289,7 @@ function GeometryGrid({ visible }) {
 }
 
 /* ─── MAIN ──────────────────────────────────────────────────────── */
-export default function Hero1() {
+export default function Hero1({ onComplete }) {
   const [step, setStep]           = useState(0)
   const [introGone, setIntroGone] = useState(false)
   const stepRef                   = useRef(0)
@@ -356,20 +361,27 @@ export default function Hero1() {
   const floatD = useFloat(9,  4800)
   const floatE = useFloat(6,  3200)
 
-  // Warp: when step reaches WARP_STEP, fade to black then scroll to hero2
+  // Warp: when step reaches WARP_STEP, opacity fades to 0 over 1.4s.
+  // onComplete is called via onTransitionEnd on the stage div (below) —
+  // fires exactly when the fade finishes, not on a guessed timeout.
   const isWarp = step >= WARP_STEP
 
   return (
     <>
       <IntroOverlay onDone={onIntroDone} />
 
-      {/* Full-screen fixed stage — no scroll container needed */}
-      <div style={{
-        position:'fixed', inset:0, zIndex:1,
-        opacity: isWarp ? 0 : 1,
-        transition: isWarp ? 'opacity 1.4s ease-in' : 'none',
-        pointerEvents: isWarp ? 'none' : 'auto',
-      }}>
+      {/* Full-screen fixed stage — sits above Hero2 (zIndex 2 > 1).
+          onTransitionEnd fires once the 1.4s opacity fade completes,
+          which is the exact right moment to hand control to Hero2. */}
+      <div
+        onTransitionEnd={isWarp ? (e) => { if (e.propertyName === 'opacity') onComplete?.() } : undefined}
+        style={{
+          position:'fixed', inset:0, zIndex:2,
+          opacity: isWarp ? 0 : 1,
+          transition: isWarp ? 'opacity 1.4s ease-in' : 'none',
+          pointerEvents: isWarp ? 'none' : 'auto',
+        }}
+      >
         <DotField stepRef={stepRef} />
         <GeometryGrid visible={step >= 2 && step <= 4} />
 
